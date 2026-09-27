@@ -1,0 +1,13 @@
+# Dev override — hot-reload mounts. `docker compose -f docker-compose.yml -f docker-compose.override.yml up`
+services:
+  govsim:
+    volumes:
+      - ../services/govsim/src:/app/src
+    environment:
+      CHAOS_ENABLED: "false"
+  core:
+    volumes:
+      - ../services/core/src:/app/src
+  ai:
+    volumes:
+      - ../services/ai/app:/app/app

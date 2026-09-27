@@ -1,0 +1,51 @@
+# Java
+*.class
+build/
+.gradle/
+out/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+dist/
+
+# Node
+node_modules/
+dist/
+.next/
+*.local
+
+# React Native / Expo
+apps/mobile/android/build/
+apps/mobile/ios/Pods/
+apps/mobile/.expo/
+
+# Generated API clients — NEVER hand-edit, regenerate via `make api`
+packages/api-client/typescript/
+packages/api-client/java/
+
+# Synthetic data outputs (regenerate via `make seed`)
+data/synthetic/output/
+
+# IDE
+.idea/
+.vscode/
+.kilo/
+*.swp
+*.swo
+
+# Env files
+.env*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/

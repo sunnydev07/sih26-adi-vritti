@@ -1,0 +1,43 @@
+{
+  "scheme": "NOS",
+  "scheme_name": "National Overseas Scholarship for ST Students",
+  "academic_year": "2026-27",
+  "category": "merit",
+  "ministry": "MoTA",
+  "portal": "NOS",
+  "rules": [
+    {
+      "claim": "st_or_pvtg_status",
+      "op": "in",
+      "value": ["ST", "PVTG"],
+      "onFail": "NOS is only for ST and PVTG students."
+    },
+    {
+      "claim": "age_years",
+      "op": "lte",
+      "value": 35,
+      "onFail": "Applicant must be 35 years or younger."
+    },
+    {
+      "claim": "family_income_annual_paise",
+      "op": "lte",
+      "value": 60000000,
+      "onFail": "Family income must not exceed ₹6,00,000 per annum."
+    },
+    {
+      "claim": "foreign_admission_offer",
+      "op": "exists",
+      "onFail": "An unconditional foreign university admission offer is required."
+    },
+    {
+      "claim": "previous_nos_award",
+      "op": "eq",
+      "value": false,
+      "onFail": "Previous NOS awardees are not eligible again."
+    }
+  ],
+  "award": {
+    "annual_maintenance_paise": 12960000,
+    "tuition_cap_paise": 80000000
+  }
+}

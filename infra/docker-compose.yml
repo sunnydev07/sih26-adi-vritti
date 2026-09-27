@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:16
+    ports: ["5432:5432"]
+    environment:
+      POSTGRES_DB: adivritti
+      POSTGRES_USER: adivritti
+      POSTGRES_PASSWORD: adivritti_dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adivritti"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio
+    ports: ["9000:9000", "9001:9001"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - miniodata:/data
+
+  govsim:
+    build: ../services/govsim
+    ports: ["4000:4000"]
+    environment:
+      CHAOS_ENABLED: "true"
+      CHAOS_ERROR_RATE: "0.08"
+
+  core:
+    build: ../services/core
+    ports: ["8080:8080"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/adivritti
+      SPRING_REDIS_HOST: redis
+      GOVSIM_BASE_URL: http://govsim:4000
+      MINIO_ENDPOINT: http://minio:9000
+
+  ai:
+    build: ../services/ai
+    ports: ["8000:8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://adivritti:adivritti_dev@postgres:5432/adivritti
+      CORE_SERVICE_URL: http://core:8080
+
+volumes:
+  pgdata:
+  miniodata:

@@ -1,0 +1,37 @@
+{
+  "scheme": "NFST",
+  "scheme_name": "National Fellowship for ST Students",
+  "academic_year": "2026-27",
+  "category": "welfare",
+  "ministry": "MoTA",
+  "portal": "SFMP",
+  "rules": [
+    {
+      "claim": "st_or_pvtg_status",
+      "op": "in",
+      "value": ["ST", "PVTG"],
+      "onFail": "NFST fellowship is only for ST and PVTG students."
+    },
+    {
+      "claim": "pg_completed",
+      "op": "eq",
+      "value": true,
+      "onFail": "Must have completed post-graduation."
+    },
+    {
+      "claim": "mphil_phd_admission",
+      "op": "eq",
+      "value": true,
+      "onFail": "Must hold MPhil/PhD admission in a recognized university."
+    },
+    {
+      "claim": "net_jrf_or_equivalent",
+      "op": "exists",
+      "onFail": "NET/JRF qualification (or equivalent) record is required."
+    }
+  ],
+  "award": {
+    "fellowship_monthly_paise": 3150000,
+    "contingency_annual_paise": 1500000
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "academic_year": "2026-27",
+  "note": "From AY 2026-27, NSP permits one merit-based + one or more welfare-based schemes simultaneously. This replaces the previous one-scheme-at-a-time rule.",
+  "merit_schemes": ["TOP_CLASS", "NOS"],
+  "welfare_schemes": ["PRE_MATRIC", "POST_MATRIC", "NFST"],
+  "rules": [
+    {
+      "type": "max_merit",
+      "value": 1,
+      "onFail": "Only one merit-based scheme allowed."
+    },
+    {
+      "type": "mutual_exclusive",
+      "schemes": ["PRE_MATRIC", "POST_MATRIC"],
+      "onFail": "Cannot hold Pre-Matric and Post-Matric simultaneously."
+    }
+  ]
+}

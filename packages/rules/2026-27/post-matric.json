@@ -1,0 +1,44 @@
+{
+  "scheme": "POST_MATRIC",
+  "scheme_name": "Post-Matric Scholarship for ST Students",
+  "academic_year": "2026-27",
+  "category": "welfare",
+  "ministry": "MoTA",
+  "portal": "NSP",
+  "rules": [
+    {
+      "claim": "st_or_pvtg_status",
+      "op": "in",
+      "value": ["ST", "PVTG"],
+      "onFail": "Post-Matric scholarship is only for ST and PVTG students."
+    },
+    {
+      "claim": "class_level",
+      "op": "in",
+      "value": [11, 12, 13, 14, 15, 16, 17],
+      "onFail": "Post-Matric covers Class XI upwards, including UG/PG."
+    },
+    {
+      "claim": "family_income_annual_paise",
+      "op": "lte",
+      "value": 25000000,
+      "onFail": "Family income must not exceed ₹2,50,000 per annum."
+    },
+    {
+      "claim": "enrolment_status",
+      "op": "eq",
+      "value": "enrolled",
+      "onFail": "Must be currently enrolled in a recognized institution."
+    },
+    {
+      "claim": "previous_year_pass",
+      "op": "eq",
+      "value": true,
+      "onFail": "Must have passed the previous qualifying examination."
+    }
+  ],
+  "award": {
+    "maintenance_allowance_annual_paise": 1200000,
+    "fee_reimbursement_paise": 2500000
+  }
+}

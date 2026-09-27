@@ -1,0 +1,13 @@
+{
+  "name": "adi-vritti-govsim",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hostile mock government systems for Adi-Vritti integration testing",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test tests/govsim.test.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

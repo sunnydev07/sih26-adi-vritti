@@ -1,0 +1,5 @@
+# AUTO-GENERATED — DO NOT HAND-EDIT.
+# This folder is generated from docs/openapi/core.yaml.
+# Run `make api` to regenerate.
+typescript/
+java/

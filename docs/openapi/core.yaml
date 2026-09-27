@@ -1,0 +1,797 @@
+openapi: 3.1.0
+info:
+  title: Adi-Vritti Core API
+  version: 1.0.0
+  description: >
+    Unified Scholarship API for MoTA's five ST scholarship schemes
+    (Pre-Matric, Post-Matric, Top Class, NFST, NOS) across NSP, SFMP and NOS portals.
+    Conventions: money in integer paise (`*_paise`, int64), dates ISO-8601 with timezone,
+    Aadhaar as `aadhaar_ref_key` reference keys only — NEVER plaintext.
+servers:
+  - url: http://localhost:8080
+    description: Local dev (docker compose `core` service)
+tags:
+  - name: identity
+  - name: scholars
+  - name: verification
+  - name: eligibility
+  - name: applications
+  - name: disbursements
+  - name: jago
+  - name: consent
+  - name: admin
+
+paths:
+  /v1/identity/resolve:
+    post:
+      tags: [identity]
+      summary: Resolve identity records to a USID
+      description: >
+        Accept demographic data from multiple systems. Run 3-stage resolution
+        (deterministic → probabilistic → human adjudication). Return USID +
+        linked system records + confidence scores.
+      operationId: resolveIdentity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IdentityResolveRequest'
+      responses:
+        '200':
+          description: Resolution result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdentityResolveResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+
+  /v1/scholars/{usid}/dashboard:
+    get:
+      tags: [scholars]
+      summary: Unified student dashboard
+      description: >
+        Single call powering the student home screen: schemes array (status,
+        eligibility, stage, SLA, amounts), pending actions, money summary.
+      operationId: getDashboard
+      parameters:
+        - $ref: '#/components/parameters/UsidPath'
+      responses:
+        '200':
+          description: Dashboard payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/verify:
+    post:
+      tags: [verification]
+      summary: Verify a claim through the tiered orchestrator
+      description: >
+        Accept claim_type + subject USID. Run through the 4-tier strategy chain
+        (gov-verified → corroborated → assisted → pending-review). Return the
+        verification result + provenance. A failure NEVER blocks an application —
+        it creates a deficiency with an actionable resolution route.
+      operationId: verifyClaim
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/scholars/{usid}/claims:
+    get:
+      tags: [scholars]
+      summary: List verified claims in the wallet
+      description: Array of verified claims with validity windows, source, method, confidence.
+      operationId: listClaims
+      parameters:
+        - $ref: '#/components/parameters/UsidPath'
+        - name: include_expired
+          in: query
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Claims wallet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimsListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/eligibility/evaluate:
+    post:
+      tags: [eligibility]
+      summary: Evaluate eligibility across the five schemes
+      description: >
+        Accept USID + optional academic_year. Return per-scheme verdict
+        (`eligible`, `not_eligible`, `missing_items`) with reasons and missing_claims.
+      operationId: evaluateEligibility
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EligibilityRequest'
+      responses:
+        '200':
+          description: Per-scheme verdicts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EligibilityResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/applications/{id}/timeline:
+    get:
+      tags: [applications]
+      summary: Application stage history
+      description: >
+        Array of stage events (stage, actor, timestamp, notes), current_stage,
+        current_actor, sla_deadline, days_elapsed.
+      operationId: getApplicationTimeline
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Timeline
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationTimelineResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/disbursements/{usid}:
+    get:
+      tags: [disbursements]
+      summary: Disbursements with decoded failure reasons
+      description: >
+        Array of disbursements with amounts (paise), PFMS reference, status,
+        failure_code, decoded_failure_reason, fix_instructions.
+      operationId: listDisbursements
+      parameters:
+        - $ref: '#/components/parameters/UsidPath'
+      responses:
+        '200':
+          description: Disbursement list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisbursementListResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/jago/tool/{name}:
+    post:
+      tags: [jago]
+      summary: Invoke a JAGO+ tool
+      description: >
+        Tool invocation for the JAGO chatbot. Request: tool name + parameters.
+        Response: STRUCTURED tool output (never free-text status). Factual answers
+        are template-filled from this output by the caller.
+      operationId: invokeJagoTool
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [get_my_applications, check_eligibility, explain_deficiency, why_is_payment_pending, next_action, list_required_documents, get_disbursement_history]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JagoToolRequest'
+      responses:
+        '200':
+          description: Structured tool output
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JagoToolResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/consent:
+    post:
+      tags: [consent]
+      summary: Create a consent artefact
+      description: 'Create consent artefact: purpose, scope, granted_by, expires_at.'
+      operationId: createConsent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentCreateRequest'
+      responses:
+        '201':
+          description: Consent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentArtefact'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /v1/consent/{id}:
+    delete:
+      tags: [consent]
+      summary: Revoke a consent artefact
+      operationId: revokeConsent
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Consent revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentArtefact'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/scholars/{usid}/audit:
+    get:
+      tags: [scholars]
+      summary: Access audit trail
+      description: Who accessed which field, when, under which consent.
+      operationId: getAuditTrail
+      parameters:
+        - $ref: '#/components/parameters/UsidPath'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+      responses:
+        '200':
+          description: Paginated audit events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditPage'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/admin/coverage-gap:
+    get:
+      tags: [admin]
+      summary: Coverage gap analytics
+      description: >
+        Query params: state, district, block, school, pvtg_filter.
+        Return aggregated gap data + school-level lists. Privacy-preserving:
+        computed over HMAC hashed keys, no raw PII crosses ministry boundaries.
+      operationId: getCoverageGap
+      parameters:
+        - name: state
+          in: query
+          schema: { type: string }
+        - name: district
+          in: query
+          schema: { type: string }
+        - name: block
+          in: query
+          schema: { type: string }
+        - name: school
+          in: query
+          schema: { type: string }
+        - name: pvtg_filter
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Gap analysis
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoverageGapResponse'
+
+  /v1/admin/exceptions:
+    get:
+      tags: [admin]
+      summary: Officer review queue
+      description: Filterable, sortable exception queue with STP scores.
+      operationId: listExceptions
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [breach_risk, sla_deadline, stp_score]
+            default: breach_risk
+        - name: stage
+          in: query
+          schema: { type: string }
+        - name: scheme
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Paginated exceptions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExceptionPage'
+
+components:
+  parameters:
+    UsidPath:
+      name: usid
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Unified Scholar ID
+    PageParam:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeParam:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unprocessable:
+      description: Unprocessable — needs human adjudication
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code: { type: string, example: SCHOLAR_NOT_FOUND }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+
+    IdentityResolveRequest:
+      type: object
+      required: [records]
+      properties:
+        records:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/IdentityRecord'
+        idempotency_key:
+          type: string
+          description: Client-supplied key for safe retries
+
+    IdentityRecord:
+      type: object
+      required: [system_name, external_id, full_name]
+      properties:
+        system_name:
+          type: string
+          enum: [NSP, SFMP, NOS, UDISE, APAAR]
+        external_id: { type: string, description: OTR / Scholar ID / external key in the source system }
+        full_name: { type: string }
+        dob:
+          type: string
+          format: date
+          description: YYYY-MM-DD
+        gender: { type: string, enum: [female, male, other] }
+        guardian_name: { type: string }
+        institution_code: { type: string }
+        district: { type: string }
+        bank_account_last4: { type: string, pattern: '^[0-9]{4}$' }
+        otr_id: { type: string, description: 14-digit NSP OTR where known }
+        aadhaar_ref_key:
+          type: string
+          description: Aadhaar Data Vault reference key — NEVER the Aadhaar number
+
+    LinkedSystemRecord:
+      type: object
+      required: [system_name, external_id, confidence, resolution_method]
+      properties:
+        system_name: { type: string }
+        external_id: { type: string }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        resolution_method:
+          type: string
+          enum: [deterministic, probabilistic, human_adjudication]
+
+    IdentityResolveResponse:
+      type: object
+      required: [usid, linked_records, duplicate_flag]
+      properties:
+        usid: { type: string, format: uuid }
+        linked_records:
+          type: array
+          items:
+            $ref: '#/components/schemas/LinkedSystemRecord'
+        overall_confidence: { type: number, minimum: 0, maximum: 1 }
+        needs_human_review: { type: boolean }
+        duplicate_flag:
+          type: object
+          required: [is_duplicate]
+          properties:
+            is_duplicate: { type: boolean }
+            duplicate_usids:
+              type: array
+              items: { type: string, format: uuid }
+
+    SchemeStatus:
+      type: object
+      required: [scheme, scheme_name, status, stage, current_actor, days_elapsed, sla_days, sanctioned_amount_paise, paid_amount_paise]
+      properties:
+        scheme: { type: string, enum: [PRE_MATRIC, POST_MATRIC, TOP_CLASS, NFST, NOS] }
+        scheme_name: { type: string }
+        status:
+          type: string
+          enum: [eligible, applied, in_verification, approved, disbursed, deficient, not_eligible]
+        eligibility:
+          type: string
+          enum: [eligible, not_eligible, missing_items]
+        stage: { type: string }
+        current_actor: { type: string }
+        days_elapsed: { type: integer }
+        sla_days: { type: integer }
+        sanctioned_amount_paise: { type: integer, format: int64 }
+        paid_amount_paise: { type: integer, format: int64 }
+
+    PendingAction:
+      type: object
+      required: [type, message]
+      properties:
+        type: { type: string }
+        message: { type: string }
+        action_url: { type: string }
+
+    MoneySnapshot:
+      type: object
+      required: [received_paise, pending_paise, total_sanctioned_paise]
+      properties:
+        received_paise: { type: integer, format: int64 }
+        pending_paise: { type: integer, format: int64 }
+        total_sanctioned_paise: { type: integer, format: int64 }
+
+    DashboardResponse:
+      type: object
+      required: [usid, schemes, money, pending_actions]
+      properties:
+        usid: { type: string, format: uuid }
+        schemes:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchemeStatus'
+        money:
+          $ref: '#/components/schemas/MoneySnapshot'
+        pending_actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingAction'
+
+    VerifyRequest:
+      type: object
+      required: [usid, claim_type]
+      properties:
+        usid: { type: string, format: uuid }
+        claim_type:
+          type: string
+          enum: [identity, st_status, income, domicile, academic, enrolment, institution, net_jrf, disability, bank_account]
+        evidence_ref: { type: string, description: MinIO object key / DigiLocker doc id backing this attempt }
+        idempotency_key: { type: string }
+
+    ProvenanceRecord:
+      type: object
+      required: [tier, method, source, attempted_at]
+      properties:
+        tier:
+          type: string
+          enum: [gov_verified, corroborated, assisted, pending_review]
+        method: { type: string }
+        source: { type: string }
+        attempted_at: { type: string, format: date-time }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+
+    VerifyResponse:
+      type: object
+      required: [claim_id, usid, claim_type, verdict, provenance]
+      properties:
+        claim_id: { type: string, format: uuid }
+        usid: { type: string, format: uuid }
+        claim_type: { type: string }
+        verdict:
+          type: string
+          enum: [verified, corroborated, assisted, pending_review, failed]
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        valid_until: { type: string, format: date-time, nullable: true }
+        provenance:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProvenanceRecord'
+        deficiency:
+          $ref: '#/components/schemas/Deficiency'
+
+    Deficiency:
+      type: object
+      required: [id, type, message, resolution_route, status]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        message: { type: string }
+        resolution_route: { type: string }
+        status:
+          type: string
+          enum: [open, in_progress, resolved]
+
+    Claim:
+      type: object
+      required: [id, usid, claim_type, source, method, confidence, verified_at, valid_until]
+      properties:
+        id: { type: string, format: uuid }
+        usid: { type: string, format: uuid }
+        claim_type: { type: string }
+        source: { type: string }
+        method: { type: string }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        verified_at: { type: string, format: date-time }
+        valid_until: { type: string, format: date-time }
+        expired: { type: boolean }
+
+    ClaimsListResponse:
+      type: object
+      required: [usid, claims]
+      properties:
+        usid: { type: string, format: uuid }
+        claims:
+          type: array
+          items:
+            $ref: '#/components/schemas/Claim'
+
+    EligibilityRequest:
+      type: object
+      required: [usid]
+      properties:
+        usid: { type: string, format: uuid }
+        academic_year: { type: string, example: '2026-27', default: '2026-27' }
+
+    SchemeVerdict:
+      type: object
+      required: [scheme, verdict, reasons]
+      properties:
+        scheme: { type: string }
+        verdict:
+          type: string
+          enum: [eligible, not_eligible, missing_items]
+        reasons:
+          type: array
+          items: { type: string }
+        missing_claims:
+          type: array
+          items: { type: string }
+
+    EligibilityResponse:
+      type: object
+      required: [usid, academic_year, verdicts]
+      properties:
+        usid: { type: string, format: uuid }
+        academic_year: { type: string }
+        verdicts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchemeVerdict'
+
+    TimelineEvent:
+      type: object
+      required: [stage, actor, timestamp]
+      properties:
+        stage: { type: string }
+        actor: { type: string }
+        timestamp: { type: string, format: date-time }
+        notes: { type: string }
+
+    ApplicationTimelineResponse:
+      type: object
+      required: [application_id, current_stage, current_actor, sla_deadline, days_elapsed, events]
+      properties:
+        application_id: { type: string, format: uuid }
+        current_stage: { type: string }
+        current_actor: { type: string }
+        sla_deadline: { type: string, format: date-time }
+        days_elapsed: { type: integer }
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelineEvent'
+
+    Disbursement:
+      type: object
+      required: [id, scheme, sanctioned_amount_paise, paid_amount_paise, status]
+      properties:
+        id: { type: string, format: uuid }
+        scheme: { type: string }
+        sanctioned_amount_paise: { type: integer, format: int64 }
+        paid_amount_paise: { type: integer, format: int64 }
+        pfms_ref: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [sanctioned, in_pfms, paid, failed, pending]
+        failure_code: { type: string, nullable: true }
+        decoded_failure_reason: { type: string, nullable: true }
+        fix_instructions: { type: string, nullable: true }
+        disbursed_at: { type: string, format: date-time, nullable: true }
+
+    DisbursementListResponse:
+      type: object
+      required: [usid, disbursements]
+      properties:
+        usid: { type: string, format: uuid }
+        disbursements:
+          type: array
+          items:
+            $ref: '#/components/schemas/Disbursement'
+
+    JagoToolRequest:
+      type: object
+      required: [usid]
+      properties:
+        usid: { type: string, format: uuid }
+        parameters: { type: object, additionalProperties: true }
+
+    JagoToolResponse:
+      type: object
+      required: [tool, usid, output]
+      properties:
+        tool: { type: string }
+        usid: { type: string, format: uuid }
+        output: { type: object, additionalProperties: true }
+        template_id:
+          type: string
+          description: ID of the client-side template used to render the answer
+
+    ConsentCreateRequest:
+      type: object
+      required: [usid, purpose, scope, granted_by]
+      properties:
+        usid: { type: string, format: uuid }
+        purpose: { type: string }
+        scope:
+          type: array
+          items: { type: string }
+        granted_by: { type: string, description: USID of scholar or linked guardian }
+        expires_at: { type: string, format: date-time }
+
+    ConsentArtefact:
+      type: object
+      required: [id, usid, purpose, scope, granted_by, granted_at]
+      properties:
+        id: { type: string, format: uuid }
+        usid: { type: string, format: uuid }
+        purpose: { type: string }
+        scope:
+          type: array
+          items: { type: string }
+        granted_by: { type: string }
+        granted_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time, nullable: true }
+        revoked_at: { type: string, format: date-time, nullable: true }
+
+    AuditEvent:
+      type: object
+      required: [id, accessor, field_accessed, accessed_at]
+      properties:
+        id: { type: integer, format: int64 }
+        accessor: { type: string }
+        field_accessed: { type: string }
+        consent_id: { type: string, format: uuid, nullable: true }
+        accessed_at: { type: string, format: date-time }
+
+    AuditPage:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEvent'
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+
+    SchoolGap:
+      type: object
+      required: [school, enrolled_students, applicants, gap_count]
+      properties:
+        school: { type: string }
+        block: { type: string }
+        district: { type: string }
+        state: { type: string }
+        enrolled_students: { type: integer }
+        applicants: { type: integer }
+        gap_count: { type: integer }
+        pvtg_gap_count: { type: integer }
+
+    CoverageGapResponse:
+      type: object
+      required: [total_enrolled, total_applicants, total_gap, schools]
+      properties:
+        total_enrolled: { type: integer }
+        total_applicants: { type: integer }
+        total_gap: { type: integer }
+        schools:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchoolGap'
+
+    ExceptionItem:
+      type: object
+      required: [application_id, usid, student_name, scheme, stage, stp_score, breach_risk]
+      properties:
+        application_id: { type: string, format: uuid }
+        usid: { type: string, format: uuid }
+        student_name: { type: string }
+        scheme: { type: string }
+        stage: { type: string }
+        stp_score: { type: number, minimum: 0, maximum: 1 }
+        breach_risk: { type: number, minimum: 0, maximum: 1 }
+        sla_deadline: { type: string, format: date-time }
+
+    ExceptionPage:
+      type: object
+      required: [items, total, page, page_size]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExceptionItem'
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }

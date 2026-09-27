@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/@openapitools/openapi-generator-cli/config.schema.json",
+  "spaces": 2,
+  "generator-cli": {
+    "version": "7.7.0",
+    "generators": {
+      "typescript-fetch": {
+        "inputSpec": "../../docs/openapi/core.yaml",
+        "output": "./typescript",
+        "additionalProperties": {
+          "supportsES6": true,
+          "typescriptThreePlus": true
+        }
+      },
+      "java-restclient": {
+        "inputSpec": "../../docs/openapi/core.yaml",
+        "output": "./java",
+        "additionalProperties": {
+          "library": "restclient",
+          "java21": true,
+          "useJakartaEe": true
+        }
+      }
+    }
+  }
+}

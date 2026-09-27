@@ -1,0 +1,39 @@
+spring:
+  profiles:
+    active: dev
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/adivritti}
+    username: ${SPRING_DATASOURCE_USERNAME:adivritti}
+    password: ${SPRING_DATASOURCE_PASSWORD:adivritti_dev}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: 6379
+
+app:
+  govsim:
+    base-url: ${GOVSIM_BASE_URL:http://localhost:4000}
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    bucket: documents
+  ai-service:
+    base-url: ${AI_SERVICE_URL:http://localhost:8000}
+  verification:
+    cache-ttl-seconds: 3600
+  aadhaar:
+    vault-encryption-key: ${AADHAAR_VAULT_KEY:dev-key-replace-in-prod}
+  rules-path: ${RULES_PATH:../../packages/rules}
+
+server:
+  port: 8080

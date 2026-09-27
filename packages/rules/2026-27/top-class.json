@@ -1,0 +1,39 @@
+{
+  "scheme": "TOP_CLASS",
+  "scheme_name": "Top Class Education for ST Students",
+  "academic_year": "2026-27",
+  "category": "merit",
+  "ministry": "MoTA",
+  "portal": "NSP",
+  "rules": [
+    {
+      "claim": "st_or_pvtg_status",
+      "op": "in",
+      "value": ["ST", "PVTG"],
+      "onFail": "Top Class scheme is only for ST and PVTG students."
+    },
+    {
+      "claim": "institution_top_class_listed",
+      "op": "eq",
+      "value": true,
+      "onFail": "Institution must be in the Top Class listed-institutes list."
+    },
+    {
+      "claim": "family_income_annual_paise",
+      "op": "lte",
+      "value": 60000000,
+      "onFail": "Family income must not exceed ₹6,00,000 per annum."
+    },
+    {
+      "claim": "enrolment_status",
+      "op": "eq",
+      "value": "enrolled",
+      "onFail": "Must be currently enrolled in a recognized institution."
+    }
+  ],
+  "award": {
+    "full_fee_paise": 5000000,
+    "living_expense_annual_paise": 2400000,
+    "book_grant_annual_paise": 500000
+  }
+}
