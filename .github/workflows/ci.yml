@@ -207,6 +207,22 @@ jobs:
             | head -12 | while IFS= read -r l; do echo "::error title=core err::${l}"; done
           tail -22 "$f" | while IFS= read -r l; do echo "::error title=core tail::${l}"; done
 
+      - name: Thread dump of the stalled JVM
+        if: failure()
+        # SIGQUIT makes a JVM dump every thread stack to stdout, which lands in
+        # the container log. Distinguishes "hung on X" from "logged nothing"
+        # in one shot, and needs no jstack (the runtime image is a JRE).
+        run: |
+          docker compose -f infra/docker-compose.yml exec -T core sh -c \
+            'grep ^State /proc/1/status; echo "wchan: $(cat /proc/1/wchan 2>/dev/null)"; echo "threads: $(ls /proc/1/task | wc -l)"; kill -3 1' 2>&1 \
+            | while IFS= read -r l; do echo "::error title=core proc::${l}"; done
+          sleep 5
+          f="$RUNNER_TEMP/dump.log"
+          docker compose -f infra/docker-compose.yml logs --no-color --timestamps core > "$f" 2>&1 || true
+          echo "::error title=core::log lines after dump: $(wc -l < "$f")"
+          awk '/"main"/{p=1} p{print} p&&/^$/{exit}' "$f" | head -24 \
+            | while IFS= read -r l; do echo "::error title=core main::${l}"; done
+
       - name: Tear down
         if: always()
         run: docker compose -f infra/docker-compose.yml down -v
