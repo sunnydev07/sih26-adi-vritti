@@ -186,19 +186,36 @@ jobs:
             -d '{"aadhaar_ref":"CI-SMOKE-001"}')
           echo "$body" | grep -q hashed_key || { echo "no hashed_key in: $body"; exit 1; }
 
+      - name: Core container state
+        if: failure()
+        run: |
+          cid=$(docker compose -f infra/docker-compose.yml ps -q core)
+          if [ -z "$cid" ]; then
+            echo "::error title=core::no core container was ever created"
+            exit 0
+          fi
+          echo "::error title=core inspect::status=$(docker inspect -f '{{.State.Status}}' "$cid") restarts=$(docker inspect -f '{{.RestartCount}}' "$cid") exit=$(docker inspect -f '{{.State.ExitCode}}' "$cid")"
+
+      - name: Core boot failure cause
+        if: failure()
+        run: |
+          # The fatal cause is almost always in the last lines of the log, so
+          # emit the tail plus any error lines as annotations (the raw job log
+          # needs auth; annotations are served by the public API).
+          docker compose -f infra/docker-compose.yml logs --no-color --tail=400 core 2>&1 \
+            | grep -E 'ERROR|Exception|Caused by|APPLICATION FAILED|Failed to|Could not|Unable to' \
+            | tail -14 \
+            | while IFS= read -r l; do echo "::error title=core::${l}"; done
+          echo "::error title=core tail::---- last 14 lines of core log ----"
+          docker compose -f infra/docker-compose.yml logs --no-color --tail=400 core 2>&1 \
+            | tail -14 \
+            | while IFS= read -r l; do echo "::error title=core tail::${l}"; done
+
       - name: Stack status on failure
         if: failure()
         run: |
-          # Emitted as annotations because they are readable from the public
-          # check-runs API; the raw job log is not.
           docker compose -f infra/docker-compose.yml ps 2>&1 \
             | while IFS= read -r l; do echo "::error title=compose ps::${l}"; done
-          for svc in postgres core ai govsim; do
-            docker compose -f infra/docker-compose.yml logs --no-color --tail=60 "$svc" 2>&1 \
-              | grep -v '^$' \
-              | tail -40 \
-              | while IFS= read -r l; do echo "::error title=$svc logs::${l}"; done
-          done
 
       - name: Tear down
         if: always()
