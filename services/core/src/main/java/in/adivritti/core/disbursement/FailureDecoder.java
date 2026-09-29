@@ -26,9 +26,19 @@ public class FailureDecoder {
         "E006_OTHER", new Decoded("Other / technical failure",
             "Retry after 48 hours; if it persists raise a grievance with the PFMS reference number."));
 
+    /** Fallback for a null, blank, or unmapped code. Never returns nulls. */
+    private static final Decoded UNKNOWN = new Decoded("Other / technical failure",
+        "Retry after 48 hours; if it persists raise a grievance with the PFMS reference number.");
+
+    /**
+     * Decode a PFMS/NPCI rejection code. A missing code resolves to the generic
+     * "other" entry rather than a {@code Decoded(null, null)}, which previously
+     * produced a null-pointer failure in every downstream consumer.
+     */
     public Decoded decode(String failureCode) {
-        if (failureCode == null) return new Decoded(null, null);
-        return TAXONOMY.getOrDefault(failureCode,
-            new Decoded("Unmapped failure code: " + failureCode, "Contact the district nodal officer."));
+        if (failureCode == null || failureCode.isBlank()) return UNKNOWN;
+        return TAXONOMY.getOrDefault(failureCode.trim(),
+            new Decoded("Unmapped failure code: " + failureCode,
+                "Contact the district nodal officer."));
     }
 }

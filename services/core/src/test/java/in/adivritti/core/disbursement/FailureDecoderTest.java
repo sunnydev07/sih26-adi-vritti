@@ -1,6 +1,8 @@
 package in.adivritti.core.disbursement;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -20,6 +22,28 @@ class FailureDecoderTest {
 
     @Test
     void unknownCodeFallsBack() {
-        assertTrue(decoder.decode("E999_NOPE").cause().contains("Unmapped"));
+        assertEquals(true, decoder.decode("E999_NOPE").cause().contains("Unmapped"));
+    }
+
+    @Test
+    void nullCodeFallsBackToOtherInsteadOfNulls() {
+        // decode(null) used to return Decoded(null, null), which NPE'd every
+        // downstream consumer that renders the cause and the fix.
+        var d = decoder.decode(null);
+        assertNotNull(d.cause());
+        assertNotNull(d.fix());
+        assertEquals("Other / technical failure", d.cause());
+    }
+
+    @Test
+    void blankCodeFallsBackToOther() {
+        assertNotNull(decoder.decode("").cause());
+        assertNotNull(decoder.decode("   ").cause());
+    }
+
+    @Test
+    void surroundingWhitespaceIsTolerated() {
+        assertEquals("Aadhaar not seeded with bank account",
+            decoder.decode("  E001_AADHAAR_NOT_SEEDED  ").cause());
     }
 }

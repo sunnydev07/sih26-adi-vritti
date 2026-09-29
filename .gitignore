@@ -11,8 +11,16 @@ __pycache__/
 .venv/
 venv/
 .pytest_cache/
+.ruff_cache/
+.mypy_cache/
 *.egg-info/
 dist/
+
+# Throwaway artefacts from ad-hoc verification passes. These sit in the repo
+# root, are referenced by nothing, and would otherwise be swept into the tree by
+# a `git add -A` on any machine that ran a one-off script.
+.audit-*.js
+calculator.html
 
 # Node
 node_modules/

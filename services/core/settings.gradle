@@ -1,1 +1,7 @@
+plugins {
+    // Lets Gradle provision a matching JDK when the required toolchain (21) is not
+    // installed locally, instead of failing with "No matching toolchains found".
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
+}
+
 rootProject.name = 'adi-vritti-core'

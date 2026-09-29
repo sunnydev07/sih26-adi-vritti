@@ -50,19 +50,56 @@ infra/             docker-compose (postgres + pgvector, redis, minio, services)
 Prereqs: JDK 21, Python 3.13, Node 22, Docker.
 
 ```bash
-make dev      # boot postgres, redis, minio, govsim, core, ai
-make seed     # load deterministic synthetic data (seed 26238)
-make test-core && make test-ai   # unit tests
-make e2e      # 5-minute judging demo path (docs/specs/demo-path.md)
-make api      # regenerate API clients from the OpenAPI contract
+make dev        # boot postgres, redis, minio, govsim, core, ai (foreground)
+make dev-detach # same, detached
+make seed       # load deterministic synthetic data (seed 26238)
+make test-core  # Java unit tests (Gradle wrapper, JDK 21)
+make test-ai    # Python unit tests (see the dev-extra note below)
+make api        # regenerate API clients from the OpenAPI contract
 ```
+
+There is no end-to-end suite yet — `make e2e` exists only to say so. The
+judging demo path is `docs/specs/demo-path.md`; walk it against a running
+`make dev` stack.
+
+Before `make test-ai`, install the AI service's test tooling once. pytest lives
+in the `dev` extra, not the runtime dependencies, so a plain install has no
+pytest:
+
+```bash
+cd services/ai && pip install -e '.[dev]'
+```
+
+`make docker-compose-config` validates `infra/docker-compose.yml` without
+starting anything.
 
 | Service | Local URL |
 |---|---|
 | Officer web | http://localhost:3000 (`npm run dev` in `apps/officer-web`) |
 | Core API | http://localhost:8080 |
-| AI services | http://localhost:8000/docs |
+| AI services | http://localhost:8000/health — no `/docs`; interactive OpenAPI is disabled in the service |
 | GoVSim mocks | http://localhost:4000/health |
+
+## Upgrading from the pre-pgvector stack
+
+`infra/docker-compose.yml` now runs `pgvector/pgvector:pg16` instead of
+`postgres:16`, and the AI tests need the `dev` extra. The image swap has one
+gotcha: the official postgres entrypoint executes
+`/docker-entrypoint-initdb.d/*.sql` **only when `PGDATA` is empty**, so if you
+already have the `pgdata` volume from a previous run, `infra/init-db.sql` never
+executes. Postgres still reports healthy (`pg_isready` passes) with no `vector`
+extension installed, and the first vector DDL fails later.
+
+Do this exactly once:
+
+```bash
+make clean                      # drops the volumes; simplest, destroys the data
+# or, to keep the data:
+make dev-detach && make init-db # applies the extensions to the running database
+```
+
+`make init-db` just runs the idempotent `infra/init-db.sql` through `psql`, so it
+is safe to re-run.
 
 ## Non-negotiables
 
@@ -75,7 +112,13 @@ make api      # regenerate API clients from the OpenAPI contract
 ## Deployment
 
 - **Officer web** → Vercel, auto-deploys from `main` (root directory `apps/officer-web`).
-- **Backend** → `infra/docker-compose.yml` (or any Docker host) for core + ai + govsim + postgres/redis/minio.
+- **Backend** → run on a real Docker host, but **not** by pointing it at
+  `infra/docker-compose.yml` as-is. That file is a development stack: committed
+  dev secrets and `SPRING_PROFILES_ACTIVE=dev`, which leaves the whole Core API
+  on port 8080 unauthenticated (including `/actuator/metrics`). Set
+  `SPRING_PROFILES_ACTIVE=prod` and supply real values for
+  `AADHAAR_VAULT_HMAC_KEY`, `CLAIM_VAULT_KEY`, `JWT_HMAC_SECRET`,
+  `GAP_HMAC_SALT`, `AI_SERVICE_TOKEN` and `POSTGRES_PASSWORD`.
 - **Mobile** → Expo EAS builds.
 
 ## Integration readiness

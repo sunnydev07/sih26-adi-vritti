@@ -2,6 +2,7 @@ package in.adivritti.core.identity;
 
 import in.adivritti.core.identity.dto.IdentityDtos.IdentityResolveRequest;
 import in.adivritti.core.identity.dto.IdentityDtos.IdentityResolveResponse;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,7 +20,7 @@ public class IdentityController {
     }
 
     @PostMapping("/resolve")
-    ResponseEntity<IdentityResolveResponse> resolve(@RequestBody IdentityResolveRequest req) {
+    ResponseEntity<IdentityResolveResponse> resolve(@Valid @RequestBody IdentityResolveRequest req) {
         return ResponseEntity.ok(service.resolve(req));
     }
 }

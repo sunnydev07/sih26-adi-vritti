@@ -1,0 +1,22 @@
+# Production profile. Fails fast on missing or weak security configuration rather
+# than booting with a guessable key or an unauthenticated API.
+spring:
+  config:
+    activate:
+      on-profile: prod
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    validate-on-migrate: true
+
+app:
+  aadhaar:
+    enforce-verhoeff: true
+  security:
+    allow-insecure-dev: false
+
+logging:
+  level:
+    root: INFO
+    in.adivritti: INFO

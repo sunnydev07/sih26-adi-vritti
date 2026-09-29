@@ -1,24 +1,55 @@
+[build-system]
+# Required. Without this, `pip install .` falls back to a legacy setuptools
+# path that cannot build a project defined only in pyproject.toml.
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "adi-vritti-ai"
 version = "1.0.0"
 requires-python = ">=3.13"
+# Runtime, exactly what app/ imports. Kept lean on purpose: a deployed image
+# should not carry a database driver, an image library, an OCR binding or two
+# LangChain packages for code paths that do not exist. The wheels behind the
+# unfinished RAG/OCR work live in the `full` extra below.
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]",
     "pydantic>=2.0",
-    "pydantic-settings",
+    "pydantic-settings>=2.0",
+    "httpx",
+    "python-multipart",
+]
+
+[project.optional-dependencies]
+# Test tooling was previously in the runtime dependency list, so every deployed
+# container shipped pytest. These are installed with `pip install '.[dev]'`.
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx",
+]
+# Not imported anywhere yet -- verified by grepping every module under app/ and
+# tests/. They are staged here rather than deleted because the intended RAG
+# wiring (app/services/rag_service.py) and any future OCR path will need them.
+# Installed with `pip install '.[full]'`; the runtime image does not use this.
+full = [
     "sqlalchemy>=2.0",
     "pgvector",
     "psycopg[binary]",
-    "httpx",
-    "python-multipart",
     "pillow",
     "pytesseract",
     "langchain-core",
     "langchain-community",
-    "pytest",
-    "pytest-asyncio",
 ]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["error::DeprecationWarning:app.*"]
 
 [tool.ruff]
 target-version = "py313"

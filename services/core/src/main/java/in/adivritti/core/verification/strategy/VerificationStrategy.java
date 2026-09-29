@@ -6,7 +6,12 @@ import java.util.Optional;
 /** One tier of the 4-tier strategy chain. Returns empty when it cannot decide. */
 public interface VerificationStrategy {
     String tier();
-    Optional<TierResult> attempt(VerifyRequest req);
+    Optional<TierResult> attempt(VerificationAttempt attempt);
 
     record TierResult(boolean verified, double confidence, String source, String method, String note) {}
+
+    /** Convenience for strategies that do not need the request itself. */
+    default Optional<TierResult> attempt(VerifyRequest request) {
+        return attempt(new VerificationAttempt(request));
+    }
 }

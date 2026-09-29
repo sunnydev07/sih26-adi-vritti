@@ -1,13 +1,25 @@
-# Dev override — hot-reload mounts. `docker compose -f docker-compose.yml -f docker-compose.override.yml up`
+# Local development override. Opt in explicitly:
+#   make dev COMPOSE="docker compose -f infra/docker-compose.yml -f infra/docker-compose.override.yml"
+#
+# It is NOT auto-loaded, because Docker Compose only auto-merges a file literally
+# named docker-compose.override.yml sitting next to the file passed with -f, and
+# the Makefile always passes infra/docker-compose.yml explicitly.
+#
+# Each mount is hot-reload for a service that runs from source.
 services:
   govsim:
     volumes:
-      - ../services/govsim/src:/app/src
+      - ../services/govsim/src:/app/src:ro
     environment:
+      # Chaos off by default for the override: a deterministic stack is much
+      # easier to develop against than one returning random 500s.
       CHAOS_ENABLED: "false"
-  core:
-    volumes:
-      - ../services/core/src:/app/src
+
   ai:
     volumes:
-      - ../services/ai/app:/app/app
+      - ../services/ai/app:/app/app:ro
+
+  # No core mount: the runtime image contains only the packaged boot JAR
+  # (app.jar), so there is no /app/src to shadow. Java changes need
+  # `make rebuild`; the rules-as-data JSON is mounted from packages/rules by the
+  # base file and does hot-reload.

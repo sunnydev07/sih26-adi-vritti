@@ -1,0 +1,18 @@
+# Keep the build context small and stop a host interpreter's caches from
+# shadowing the image's. Without this, services/ai/node_modules-equivalent
+# bloat and __pycache__ .pyc files built on Windows get copied in, and a stale
+# .pytest_cache can make the image disagree with the tests that passed.
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+tests/
+.git/
+.gitignore
+Dockerfile
+.dockerignore
+*.log

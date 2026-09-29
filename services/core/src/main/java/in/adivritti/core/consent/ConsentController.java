@@ -3,22 +3,39 @@ package in.adivritti.core.consent;
 import in.adivritti.core.consent.dto.ConsentDtos.AuditPage;
 import in.adivritti.core.consent.dto.ConsentDtos.ConsentCreateRequest;
 import in.adivritti.core.consent.dto.ConsentDtos.ConsentDto;
+import in.adivritti.core.security.ScholarAccessGuard;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@RequestMapping
+@Validated
 public class ConsentController {
 
     private final ConsentService service;
+    private final ScholarAccessGuard access;
 
-    public ConsentController(ConsentService service) {
+    public ConsentController(ConsentService service, ScholarAccessGuard access) {
         this.service = service;
+        this.access = access;
     }
 
     @PostMapping("/v1/consent")
-    ResponseEntity<ConsentDto> grant(@RequestBody ConsentCreateRequest req) {
+    ResponseEntity<ConsentDto> grant(@Valid @RequestBody ConsentCreateRequest req) {
+        access.check(req.usid());
         return ResponseEntity.status(HttpStatus.CREATED).body(service.grant(req));
     }
 
@@ -27,10 +44,13 @@ public class ConsentController {
         return ResponseEntity.ok(service.revoke(id));
     }
 
+    /** The access audit is the DPDP "who looked at my data" record — officer-only. */
     @GetMapping("/v1/scholars/{usid}/audit")
     ResponseEntity<AuditPage> audit(@PathVariable UUID usid,
-        @RequestParam(defaultValue = "1") int page,
-        @RequestParam(defaultValue = "20") int pageSize) {
-        return ResponseEntity.ok(service.audit(usid, page, pageSize));
+        @RequestParam(defaultValue = "1") @Min(1) int page,
+        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize) {
+        access.check(usid);
+        // Service pages are 0-indexed; the contract is 1-indexed.
+        return ResponseEntity.ok(service.audit(usid, page - 1, pageSize));
     }
 }

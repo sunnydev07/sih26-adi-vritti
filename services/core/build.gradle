@@ -7,9 +7,14 @@ plugins {
 group = 'in.adivritti'
 version = '1.0.0'
 
+// CI and Docker pin 21. Local machines without a JDK 21 can override with
+// -PjavaToolchainVersion=23 (or whatever is installed) without editing this file.
+def javaToolchainVersion = Integer.parseInt(
+    providers.gradleProperty('javaToolchainVersion').getOrElse('21'))
+
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(javaToolchainVersion)
     }
 }
 
@@ -19,10 +24,13 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    // WebFlux is present only for WebClient (the govsim/AI adapters). The servlet
+    // container remains Tomcat because spring-boot-starter-web is on the classpath.
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.flywaydb:flyway-core'
@@ -30,15 +38,27 @@ dependencies {
     implementation 'org.postgresql:postgresql'
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
     implementation 'com.github.ben-manes.caffeine:caffeine'
-    implementation 'org.hibernate.orm:hibernate-core'
-
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation('org.springframework.boot:spring-boot-starter-test') {
+        exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
+    }
     testImplementation 'org.springframework.security:spring-security-test'
-    testImplementation 'org.testcontainers:testcontainers'
-    testImplementation 'org.testcontainers:postgresql'
     testImplementation platform('org.junit:junit-bom:5.11.3')
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        // Unit tests must never require a live Postgres/Redis. Tests that do are
+        // opt-in via @Tag("integration").
+        excludeTags 'integration'
+    }
+    testLogging {
+        events 'failed'
+        exceptionFormat 'full'
+    }
+}
+
+// Sources contain non-ASCII (Devanagari names, the rupee sign). Pin the encoding so
+// the build does not silently depend on the platform default charset.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
 }

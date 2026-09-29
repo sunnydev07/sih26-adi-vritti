@@ -1,0 +1,31 @@
+# Local development profile. Secrets here are DEVELOPMENT-ONLY and are committed
+# deliberately so `make dev` works out of the box. Never activate this in production.
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+app:
+  ai-service:
+    # Same default as AI_SERVICE_TOKEN in infra/docker-compose.yml, so the local
+    # stack authenticates. Development only.
+    token: ${AI_SERVICE_TOKEN:dev-only-ai-service-token}
+  aadhaar:
+    # base64("dev-only-hmac-key-32-bytes-long!") == 32 bytes. Obviously not a
+    # real secret; overridden in every real environment.
+    vault-hmac-key: ${AADHAAR_VAULT_HMAC_KEY:ZGV2LW9ubHktaG1hYy1rZXktMzItYnl0ZXMtbG9uZyE=}
+    # Synthetic seed data is not Verhoeff-valid, so the checksum gate is relaxed
+    # locally. It stays ON in the prod profile.
+    enforce-verhoeff: false
+  vault:
+    # base64("dev-only-aes256-key-32-bytes-lon") == 32 bytes, development only.
+    encryption-key: ${CLAIM_VAULT_KEY:ZGV2LW9ubHktYWVzMjU2LWtleS0zMi1ieXRlcy1sb24=}
+  security:
+    allow-insecure-dev: true
+    jwt:
+      # base64("dev-only-jwt-secret-32-bytes-lo") == 32 bytes, development only.
+      hmac-secret: ${JWT_HMAC_SECRET:ZGV2LW9ubHktand0LXNlY3JldC0zMi1ieXRlcy1sb24=}
+
+logging:
+  level:
+    in.adivritti: DEBUG

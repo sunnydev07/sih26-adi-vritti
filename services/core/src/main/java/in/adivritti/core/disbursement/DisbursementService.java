@@ -1,22 +1,42 @@
 package in.adivritti.core.disbursement;
 
+import in.adivritti.core.common.exception.NotFoundException;
+import in.adivritti.core.disbursement.dto.DisbursementDtos.DisbursementDto;
 import in.adivritti.core.disbursement.dto.DisbursementDtos.DisbursementListResponse;
+import in.adivritti.core.disbursement.entity.Disbursement;
+import in.adivritti.core.disbursement.repository.DisbursementRepository;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class DisbursementService {
 
     private final FailureDecoder decoder;
+    private final DisbursementRepository disbursements;
 
-    public DisbursementService(FailureDecoder decoder) {
+    public DisbursementService(FailureDecoder decoder, DisbursementRepository disbursements) {
         this.decoder = decoder;
+        this.disbursements = disbursements;
     }
 
+    /** Every failed row is decoded into a plain-language cause + concrete fix. */
+    @Transactional(readOnly = true)
     public DisbursementListResponse list(UUID usid) {
-        // Repository-backed in full wiring. Decoding shown on whatever rows exist.
-        return new DisbursementListResponse(usid, List.of());
+        if (usid == null) {
+            throw new NotFoundException("SCHOLAR_NOT_FOUND", "Scholar not found: null");
+        }
+        List<DisbursementDto> items = disbursements.findByUsidOrderByScheme(usid).stream()
+            .map(this::toDto).toList();
+        return new DisbursementListResponse(usid, items);
+    }
+
+    private DisbursementDto toDto(Disbursement d) {
+        FailureDecoder.Decoded decoded = decoder.decode(d.failureCode);
+        return new DisbursementDto(d.id, d.scheme, d.sanctionedAmountPaise, d.paidAmountPaise,
+            d.pfmsRef, d.status, d.failureCode, decoded.cause(), decoded.fix(),
+            d.disbursedAt);
     }
 
     FailureDecoder.Decoded decode(String code) {

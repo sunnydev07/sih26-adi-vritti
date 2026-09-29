@@ -2,6 +2,7 @@ package in.adivritti.core.verification;
 
 import in.adivritti.core.verification.dto.VerifyDtos.VerifyRequest;
 import in.adivritti.core.verification.dto.VerifyDtos.VerifyResponse;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,7 +20,7 @@ public class VerificationController {
     }
 
     @PostMapping
-    ResponseEntity<VerifyResponse> verify(@RequestBody VerifyRequest req) {
+    ResponseEntity<VerifyResponse> verify(@Valid @RequestBody VerifyRequest req) {
         return ResponseEntity.ok(orchestrator.verify(req));
     }
 }

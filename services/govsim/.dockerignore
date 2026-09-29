@@ -1,0 +1,14 @@
+# node_modules is ~30MB across a few hundred packages; copying it into the
+# context also risks host-platform binaries (esbuild/rollup) leaking into an
+# alpine image. A committed package-lock.json makes `npm ci` the reproducible
+# choice over `npm install`.
+node_modules/
+npm-debug.log*
+.npm/
+.git/
+.gitignore
+Dockerfile
+.dockerignore
+coverage/
+tests/
+*.log

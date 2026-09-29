@@ -1,6 +1,49 @@
+# ============================================================================
+# DEVELOPMENT ONLY. Do not deploy this file.
+#
+# Every secret in here is a published constant committed on purpose so that
+# `make dev` works from a fresh clone with zero setup, and the default profile is
+# `dev`, which sets app.security.allow-insecure-dev=true in Core. That makes
+# SecurityConfig apply anyRequest().permitAll(): the whole Core API on published
+# port 8080 answers unauthenticated callers, /actuator/metrics and
+# /actuator/health included. The AI service likewise boots with the published
+# dev-only token and the explicit ALLOW_INSECURE_DEV opt-in below.
+#
+# For any real environment you must at minimum:
+#   SPRING_PROFILES_ACTIVE=prod
+#     Selects application-prod.yml, which sets allow-insecure-dev=false and
+#     enforce-verhoeff=true. Nothing in the code refuses to BOOT with the dev
+#     profile -- that is the hazard: forget this and the service starts happily,
+#     wide open, with no warning beyond a WARN line in the log.
+#   AADHAAR_VAULT_HMAC_KEY, CLAIM_VAULT_KEY, JWT_HMAC_SECRET, GAP_HMAC_SALT,
+#   AI_SERVICE_TOKEN, CORE_SERVICE_TOKEN, POSTGRES_PASSWORD
+#     All real values, all from your secret store, none of the defaults below.
+#     The prod profile does fail fast on a missing or malformed JWT key, but
+#     nothing checks the values are not the published dev constants.
+#
+# The defaults are still overridable from the environment, so this file can be a
+# starting point, but it is not a deployment manifest.
+# ============================================================================
 services:
   postgres:
-    image: postgres:16
+    # MUST be a pgvector build: infra/init-db.sql runs `CREATE EXTENSION vector`
+    # and the stock postgres image has no such extension, so on postgres:16 the
+    # init script aborts and the container never becomes healthy — taking the
+    # whole stack down with it.
+    #
+    # UPGRADING FROM THE PRE-PGVECTOR STACK: the official entrypoint executes
+    # /docker-entrypoint-initdb.d/*.sql ONLY when PGDATA is empty. The `pgdata`
+    # volume below already exists from the earlier postgres:16 run, so this
+    # init.sql will never execute on an existing checkout. The container still
+    # passes pg_isready and reports healthy while the vector extension is
+    # silently absent, and the first vector DDL later fails. Fix it exactly once,
+    # either:
+    #   make clean
+    #     (docker compose -f infra/docker-compose.yml down -v -- destroys data)
+    # or, to keep the data:
+    #   make dev-detach && make init-db
+    # See infra/init-db.sql and the init-db target in the Makefile.
+    image: pgvector/pgvector:pg16
     ports: ["5432:5432"]
     environment:
       POSTGRES_DB: adivritti
@@ -25,7 +68,13 @@ services:
       retries: 10
 
   minio:
-    image: minio/minio
+    # Runs so the network shape is right and a later document-storage task has
+    # somewhere to land, but NOTHING is wired to it yet: there is no S3/MinIO
+    # client, no @ConfigurationProperties and no reference to these credentials
+    # anywhere under services/core/src/main/java. Core's depends_on below
+    # deliberately stays at service_started, not service_healthy, so a MinIO
+    # hiccup cannot gate the API booting.
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     ports: ["9000:9000", "9001:9001"]
     command: server /data --console-address ":9001"
     environment:
@@ -33,6 +82,11 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
     volumes:
       - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   govsim:
     build: ../services/govsim
@@ -40,6 +94,11 @@ services:
     environment:
       CHAOS_ENABLED: "true"
       CHAOS_ERROR_RATE: "0.08"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   core:
     build: ../services/core
@@ -49,11 +108,42 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      govsim:
+        condition: service_started
+      # See the note on the minio service: nothing reads MinIO yet, so this is
+      # an ordering hint and not a readiness gate. The MINIO_ENDPOINT /
+      # MINIO_ACCESS_KEY / MINIO_SECRET_KEY variables that used to sit in the
+      # core `environment` block were dead config -- no code bound them -- and
+      # have been removed rather than left to look load-bearing.
+      minio:
+        condition: service_started
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/adivritti
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-adivritti}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-adivritti_dev}
       SPRING_REDIS_HOST: redis
       GOVSIM_BASE_URL: http://govsim:4000
-      MINIO_ENDPOINT: http://minio:9000
+      # Without this the service falls back to localhost:8000 and calls itself.
+      AI_SERVICE_URL: http://ai:8000
+      # Core presents this to the AI service on /docai/parse. Every AI route
+      # except /health rejects calls without it, so an unset value here makes
+      # document-assisted verification fail on 401 and the whole tier goes
+      # quiet. Must match AI_SERVICE_TOKEN on the ai service below.
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-dev-only-ai-service-token}
+      # Rules-as-data is read from outside the JAR.
+      RULES_PATH: /rules
+      # Required: the service refuses to start without these. The development
+      # defaults below are exactly 32 bytes each and MUST be overridden before
+      # any real deployment. CLAIM_VAULT_KEY is an AES-256 key, so its length
+      # is load-bearing -- a non-32-byte key throws InvalidKeyException the
+      # first time a claim is sealed, not at boot.
+      AADHAAR_VAULT_HMAC_KEY: ${AADHAAR_VAULT_HMAC_KEY:-ZGV2LW9ubHktaG1hYy1rZXktMzItYnl0ZXMtbG9uZyE=}
+      AADHAAR_VAULT_KEY_ID: ${AADHAAR_VAULT_KEY_ID:-v1}
+      CLAIM_VAULT_KEY: ${CLAIM_VAULT_KEY:-ZGV2LW9ubHktYWVzMjU2LWtleS0zMi1ieXRlcy1sb24=}
+      JWT_HMAC_SECRET: ${JWT_HMAC_SECRET:-ZGV2LW9ubHktand0LXNlY3JldC0zMi1ieXRlcy1sb24=}
+    volumes:
+      - ../packages/rules:/rules:ro
 
   ai:
     build: ../services/ai
@@ -61,9 +151,49 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      core:
+        condition: service_started
     environment:
-      DATABASE_URL: postgresql://adivritti:adivritti_dev@postgres:5432/adivritti
       CORE_SERVICE_URL: http://core:8080
+      # Required by the privacy-preserving gap join; a shared, rotating salt.
+      GAP_HMAC_SALT: ${GAP_HMAC_SALT:-dev-salt-rotate-in-prod}
+      # Service-to-service credential. Every AI route except /health requires it;
+      # without it, /gap/hash would accept raw Aadhaar references from anyone who
+      # can reach the port, which is exactly the raw-PII transfer the design
+      # claims to avoid.
+      AI_SERVICE_TOKEN: ${AI_SERVICE_TOKEN:-dev-only-ai-service-token}
+      # DEV ONLY. The AI service refuses to run with the published
+      # dev-only-ai-service-token above unless this is explicitly true, so
+      # without it every route except /health comes back 503 and `make dev`
+      # starts a service that cannot do anything. Setting it to "true" in any
+      # real deployment re-opens /gap/hash to anonymous callers, which defeats
+      # the whole privacy design of the coverage-gap join -- so there it must be
+      # false or absent, alongside a real AI_SERVICE_TOKEN.
+      ALLOW_INSECURE_DEV: "true"
+      # Cap on /docai/parse uploads. Protects against a single request exhausting
+      # container memory.
+      DOCAI_MAX_UPLOAD_BYTES: ${DOCAI_MAX_UPLOAD_BYTES:-5242880}
+      # Bearer token the AI service presents to Core on proxied calls.
+      #
+      # The comment that used to sit here claimed Core requires JWT auth, so
+      # without this "every JAGO proxy call comes back 401/403". That is false
+      # for this compose file: SPRING_PROFILES_ACTIVE defaults to dev, and
+      # application-dev.yml sets app.security.allow-insecure-dev=true, which
+      # makes SecurityConfig override the chain with anyRequest().permitAll().
+      # On this stack every Core route, /actuator/** included, accepts an
+      # unauthenticated request, so this variable is currently inert.
+      # Outside the dev profile it is not a substitute for auth either: Core
+      # verifies a real signed JWT (JWKS, or a shared HS256 secret), and an
+      # opaque string in this field will not be accepted as one. Treat it as an
+      # unfinished integration, not as the thing that makes proxied calls work.
+      CORE_SERVICE_TOKEN: ${CORE_SERVICE_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 
 volumes:
   pgdata:
