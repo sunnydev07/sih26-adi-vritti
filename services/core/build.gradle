@@ -43,6 +43,11 @@ dependencies {
     }
     testImplementation 'org.springframework.security:spring-security-test'
     testImplementation platform('org.junit:junit-bom:5.11.3')
+    // Test-scope only, so the runtime image is unaffected. Used by
+    // RepositoryQueryValidationTest: Spring Data validates every @Query string
+    // when a repository bean is created, so an in-memory database is enough to
+    // catch a query that does not parse, without a Postgres container.
+    testRuntimeOnly 'com.h2database:h2'
 }
 
 tasks.named('test') {
