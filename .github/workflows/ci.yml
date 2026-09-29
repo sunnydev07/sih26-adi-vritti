@@ -11,6 +11,66 @@ on:
   pull_request:
 
 jobs:
+  # Fast loop for the schema itself. Applying the real migration against a real
+  # pgvector database takes seconds, so a SQL mistake shows up in ~1 minute
+  # instead of after a Spring Boot container build and boot. The stack job below
+  # still verifies the whole thing end to end, but this is where you iterate.
+  migration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: adivritti
+          POSTGRES_USER: adivritti
+          POSTGRES_PASSWORD: adivritti_dev
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U adivritti"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply init-db.sql (extensions)
+        run: |
+          set +e
+          out=$(psql "postgresql://adivritti:adivritti_dev@localhost:5432/adivritti" \
+            -v ON_ERROR_STOP=1 -q -f infra/init-db.sql 2>&1); rc=$?
+          if [ $rc -ne 0 ]; then
+            echo "$out" | while IFS= read -r l; do echo "::error title=init-db.sql::${l}"; done
+            exit 1
+          fi
+          echo "$out"
+
+      - name: Apply V1__initial_schema.sql
+        run: |
+          set +e
+          out=$(psql "postgresql://adivritti:adivritti_dev@localhost:5432/adivritti" \
+            -v ON_ERROR_STOP=1 -f services/core/src/main/resources/db/migration/V1__initial_schema.sql 2>&1); rc=$?
+          if [ $rc -ne 0 ]; then
+            echo "$out" | while IFS= read -r l; do echo "::error title=V1__initial_schema.sql::${l}"; done
+            exit 1
+          fi
+          echo "$out" | tail -20
+
+      - name: Assert the schema landed
+        run: |
+          url="postgresql://adivritti:adivritti_dev@localhost:5432/adivritti"
+          n=$(psql "$url" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';")
+          echo "public tables: $n"
+          [ "$n" -ge 12 ] || { echo "::error title=V1::expected >=12 tables, found $n"; exit 1; }
+          psql "$url" -tAc "SELECT extname FROM pg_extension WHERE extname='vector';"
+
+      - name: Re-running V1 must be a no-op
+        run: |
+          # The migration claims to be idempotent, so the append-only guard
+          # functions and IF NOT EXISTS DDL must survive a second pass.
+          psql "postgresql://adivritti:adivritti_dev@localhost:5432/adivritti" \
+            -v ON_ERROR_STOP=1 -q \
+            -f services/core/src/main/resources/db/migration/V1__initial_schema.sql
+
   core:
     runs-on: ubuntu-latest
     steps:
@@ -81,14 +141,22 @@ jobs:
       - name: Flyway V1 migration applied
         run: |
           for i in $(seq 1 96); do
-            if [ "$(docker compose -f infra/docker-compose.yml exec -T postgres \
+            got=$(docker compose -f infra/docker-compose.yml exec -T postgres \
               psql -U adivritti -d adivritti -tAc \
-              "SELECT version FROM flyway_schema_history ORDER BY installed_rank DESC LIMIT 1;" 2>/dev/null)" = "1" ]; then
+              "SELECT version FROM flyway_schema_history ORDER BY installed_rank DESC LIMIT 1;" 2>/dev/null)
+            if [ "$got" = "1" ]; then
               echo "V1 applied"; exit 0
+            fi
+            # Once the core container has exited, waiting longer is pointless.
+            running=$(docker compose -f infra/docker-compose.yml ps -q core)
+            if [ -n "$running" ] && [ "$(docker inspect -f '{{.State.Status}}' "$running" 2>/dev/null)" = "exited" ]; then
+              echo "::error title=core::container exited before applying V1 (waited ${i}x5s)"
+              exit 1
             fi
             sleep 5
           done
-          echo "flyway_schema_history never gained V1"; exit 1
+          echo "::error title=flyway::flyway_schema_history never gained V1 after 480s"
+          exit 1
 
       - name: Core actuator reports UP
         run: |
@@ -121,8 +189,16 @@ jobs:
       - name: Stack status on failure
         if: failure()
         run: |
-          docker compose -f infra/docker-compose.yml ps
-          docker compose -f infra/docker-compose.yml logs --tail=80 core ai postgres
+          # Emitted as annotations because they are readable from the public
+          # check-runs API; the raw job log is not.
+          docker compose -f infra/docker-compose.yml ps 2>&1 \
+            | while IFS= read -r l; do echo "::error title=compose ps::${l}"; done
+          for svc in postgres core ai govsim; do
+            docker compose -f infra/docker-compose.yml logs --no-color --tail=60 "$svc" 2>&1 \
+              | grep -v '^$' \
+              | tail -40 \
+              | while IFS= read -r l; do echo "::error title=$svc logs::${l}"; done
+          done
 
       - name: Tear down
         if: always()
