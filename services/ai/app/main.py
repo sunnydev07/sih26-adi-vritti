@@ -7,7 +7,7 @@ balancers need to reach it, and it reveals nothing beyond liveness.
 
 from fastapi import FastAPI
 
-from app.routers import docai, gap, jago, matching
+from app.routers import decisions, docai, gap, jago, matching
 
 app = FastAPI(
     title="Adi-Vritti AI Services",
@@ -29,6 +29,7 @@ app.include_router(matching.router)
 app.include_router(gap.router)
 app.include_router(jago.router)
 app.include_router(docai.router)
+app.include_router(decisions.router)
 
 
 @app.get("/health")

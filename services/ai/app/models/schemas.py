@@ -60,3 +60,65 @@ class DocParseResponse(BaseModel):
     # away from zero.
     confidence: float = Field(ge=0, le=1)
     parsed_at: datetime
+
+
+class JevDecisionRequest(BaseModel):
+    state: dict[str, Any]
+    questions: dict[str, Any]
+    model: str | None = None
+
+
+class JevDecisionResponse(BaseModel):
+    decisions: dict[str, Any]
+    model: str
+    latency_ms: float
+
+
+class StpScoreRequest(BaseModel):
+    application: dict[str, Any]
+
+
+class StpScoreResponse(BaseModel):
+    auto_approve_safe: bool
+    probability: float
+    risk_level: int
+    routing: str
+    latency_ms: float
+
+
+class JagoIntentRequest(BaseModel):
+    user_message: str = Field(min_length=1, max_length=1000)
+    lang: str = Field(default="hi", max_length=16)
+
+
+class JagoIntentResponse(BaseModel):
+    intent: str
+    needs_usid: bool
+    confidence: float
+    latency_ms: float
+
+
+class ChatCompletionRequest(BaseModel):
+    messages: list[dict[str, str]]
+    temperature: float = Field(default=0.2, ge=0.0, le=2.0)
+    max_tokens: int | None = Field(default=1024, ge=1, le=8192)
+
+
+class ChatCompletionResponse(BaseModel):
+    reply: str
+    model: str
+    latency_ms: float
+
+
+class FraudScreenRequest(BaseModel):
+    application: dict[str, Any]
+
+
+class FraudScreenResponse(BaseModel):
+    is_suspicious: bool
+    fraud_risk_score: int
+    risk_level: str
+    flags: list[str]
+    recommendation: str
+    latency_ms: float
+    fallback: bool

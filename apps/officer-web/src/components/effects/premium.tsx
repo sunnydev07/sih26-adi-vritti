@@ -102,10 +102,12 @@ export function ShimmerButton({
   children,
   onClick,
   tone = "green",
+  className,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
   tone?: "green" | "indigo" | "amber" | "rose";
+  className?: string;
 }) {
   const tones: Record<string, string> = {
     green: "bg-emerald-600 hover:bg-emerald-500",
@@ -116,7 +118,7 @@ export function ShimmerButton({
   return (
     <button
       onClick={onClick}
-      className={cn("shimmer rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow transition-transform hover:scale-[1.02]", tones[tone])}
+      className={cn("shimmer rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow transition-transform hover:scale-[1.02]", tones[tone], className)}
     >
       {children}
     </button>

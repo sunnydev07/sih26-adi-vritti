@@ -48,5 +48,5 @@ async def parse_doc(
 
 
 @router.post("/rag/query")
-def rag_query(q: RagQuery, _: None = Depends(require_service_token)) -> dict:
-    return rag_service.answer(q.question, q.scheme)
+async def rag_query(q: RagQuery, _: None = Depends(require_service_token)) -> dict:
+    return await rag_service.answer(q.question, q.scheme)

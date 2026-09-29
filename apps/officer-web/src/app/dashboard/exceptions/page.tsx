@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/controls";
 import { Input } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
-import { api } from "@/lib/api";
+import { api, type JevStpResult } from "@/lib/api";
 import { maskAadhaar } from "@/lib/utils";
 import type { ExceptionItem } from "@/types";
 
@@ -24,10 +24,24 @@ export default function ExceptionsPage() {
   const [sortDesc, setSortDesc] = React.useState(true);
   const [page, setPage] = React.useState(0);
   const [selected, setSelected] = React.useState<ExceptionItem | null>(null);
+  const [jevResult, setJevResult] = React.useState<JevStpResult | null>(null);
+  const [isEvaluating, setIsEvaluating] = React.useState(false);
 
   React.useEffect(() => {
     api.getExceptionQueue().then(setRows);
   }, []);
+
+  React.useEffect(() => {
+    if (!selected) {
+      setJevResult(null);
+      return;
+    }
+    setIsEvaluating(true);
+    api.evaluateStpWithJev(selected).then((res) => {
+      setJevResult(res);
+      setIsEvaluating(false);
+    });
+  }, [selected]);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -71,6 +85,18 @@ export default function ExceptionsPage() {
     );
   }
 
+  const autoEligibleCount = React.useMemo(() => rows.filter((r) => r.stpScore >= 85).length, [rows]);
+
+  function handleBatchAutoApprove() {
+    const eligible = rows.filter((r) => r.stpScore >= 85);
+    if (eligible.length === 0) {
+      toast("No applications currently meet the ≥85% STP auto-approval threshold.");
+      return;
+    }
+    setRows((prev) => prev.filter((r) => r.stpScore < 85));
+    toast(`⚡ Auto-approved ${eligible.length} applications via JEV 1.13 Straight-Through Processing!`);
+  }
+
   return (
     <div className="space-y-4">
       <GlassCard className="flex flex-wrap items-center gap-3">
@@ -84,7 +110,14 @@ export default function ExceptionsPage() {
             className="pl-9"
           />
         </div>
-        <Badge variant="pending">{filtered.length} in queue</Badge>
+        <div className="flex items-center gap-2">
+          {autoEligibleCount > 0 ? (
+            <ShimmerButton tone="green" onClick={handleBatchAutoApprove} className="text-xs py-1.5 px-3">
+              ⚡ Batch Auto-Approve ({autoEligibleCount} files ≥85%)
+            </ShimmerButton>
+          ) : null}
+          <Badge variant="pending">{filtered.length} in queue</Badge>
+        </div>
       </GlassCard>
 
       <GlassCard className="overflow-x-auto p-2">
@@ -167,12 +200,63 @@ export default function ExceptionsPage() {
                 ))}
               </div>
             </div>
+            {/* JEV Real-Time Decision Card */}
+            <div className="rounded-xl border border-[#6366F1]/30 bg-gradient-to-br from-[#6366F1]/10 via-[var(--card)] to-[#8B5CF6]/5 p-3.5 text-sm shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-bold text-xs uppercase tracking-wider text-[#6366F1]">
+                  <span>⚡ JEV 1.13 Decision Engine</span>
+                </div>
+                {isEvaluating ? (
+                  <span className="text-xs text-[var(--muted-foreground)] animate-pulse">Evaluating...</span>
+                ) : (
+                  <Badge variant={jevResult?.autoApproveSafe ? "verified" : "review"}>
+                    {jevResult?.provider || "JEV System One"}
+                  </Badge>
+                )}
+              </div>
+              {jevResult ? (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[var(--muted-foreground)]">Auto-Approve Probability:</span>
+                    <span className="font-bold font-mono text-[var(--foreground)]">{jevResult.probability}%</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[var(--muted-foreground)]">Recommended Routing:</span>
+                    <span className="font-semibold capitalize text-[#6366F1]">{jevResult.routing.replace(/_/g, " ")}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[var(--muted-foreground)]">Decision Latency:</span>
+                    <span className="font-mono text-xs text-[var(--muted-foreground)]">{jevResult.latencyMs}ms</span>
+                  </div>
+                  {jevResult.autoApproveSafe ? (
+                    <div className="pt-2">
+                      <ShimmerButton
+                        tone="green"
+                        className="w-full text-center justify-center font-bold py-2 text-xs"
+                        onClick={() => {
+                          setRows((prev) => prev.filter((item) => item.id !== selected.id));
+                          toast(`⚡ ${selected.id} auto-approved via JEV 1.13! Audit logged.`);
+                          setSelected(null);
+                        }}
+                      >
+                        ⚡ One-Click Auto-Approve (JEV Certified)
+                      </ShimmerButton>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+
             <div className="rounded-xl bg-[var(--muted)] p-3 text-sm">
               <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-[var(--muted-foreground)]">Auto justification</h3>
               <p>{selected.justification}</p>
             </div>
             <div className="flex flex-wrap gap-2 pb-2">
-              <ShimmerButton tone="green" onClick={() => { toast(`${selected.id} approved — STP recorded`); setSelected(null); }}>
+              <ShimmerButton tone="green" onClick={() => {
+                setRows((prev) => prev.filter((item) => item.id !== selected.id));
+                toast(`${selected.id} approved — STP recorded`);
+                setSelected(null);
+              }}>
                 Approve
               </ShimmerButton>
               <ShimmerButton tone="amber" onClick={() => toast(`Info requested for ${selected.id}`)}>

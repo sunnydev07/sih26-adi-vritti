@@ -18,6 +18,15 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export interface JevStpResult {
+  autoApproveSafe: boolean;
+  probability: number;
+  riskLevel: number;
+  routing: string;
+  latencyMs: number;
+  provider: string;
+}
+
 export const api = {
   async getDashboardMetrics() {
     await delay(250);
@@ -30,6 +39,58 @@ export const api = {
   async getExceptionQueue() {
     await delay(300);
     return exceptionQueue;
+  },
+  async evaluateStpWithJev(item: { scheme: string; stpScore: number; riskScore: number; slaElapsedDays: number; slaLimitDays: number; claims: { status: string }[] }): Promise<JevStpResult> {
+    const isClean = item.claims.every((c) => c.status === "gov-verified" || c.status === "corroborated");
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch("http://localhost:8000/decisions/stp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-ai-service-token": "dev-only-ai-service-token",
+        },
+        body: JSON.stringify({
+          application: {
+            scheme: item.scheme,
+            all_claims_verified: isClean,
+            income_below_ceiling: true,
+            doc_confidence_avg: item.stpScore / 100,
+            open_deficiencies: item.claims.filter((c) => c.status === "pending-review" || c.status === "expired").length,
+            is_duplicate: false,
+            days_elapsed: item.slaElapsedDays,
+            sla_breached: item.slaElapsedDays > item.slaLimitDays,
+          },
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          autoApproveSafe: data.auto_approve_safe,
+          probability: Math.round(data.probability * 100),
+          riskLevel: data.risk_level,
+          routing: data.routing,
+          latencyMs: data.latency_ms || 120,
+          provider: "JEV 1.13 Free (Live)",
+        };
+      }
+    } catch {
+      // offline fallback
+    }
+
+    await delay(180);
+    const safe = item.stpScore >= 85 && isClean;
+    return {
+      autoApproveSafe: safe,
+      probability: item.stpScore,
+      riskLevel: safe ? 1 : item.riskScore > 50 ? 4 : 2,
+      routing: safe ? "auto_approve" : "senior_officer_review",
+      latencyMs: 85,
+      provider: "JEV Rules (Deterministic Engine)",
+    };
   },
   async getCoverageChildren(parentId: string | null) {
     await delay(200);

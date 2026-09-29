@@ -67,6 +67,20 @@ class Settings(BaseSettings):
     # Hard cap on a single /docai/parse upload. read() is unbounded without it.
     docai_max_upload_bytes: int = 5 * 1024 * 1024
 
+    # OpenCode Zen (JEV 1.13 - System One decisions)
+    opencode_zen_api_key: str = ""
+    opencode_zen_model: str = "jev-1.13-free"
+    opencode_zen_url: str = "https://opencode.ai/zen/v1/systemone"
+
+    # Groq (openai/gpt-oss-20b - chat completions)
+    groq_api_key: str = ""
+    groq_model: str = "openai/gpt-oss-20b"
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+
+    # Feature flags for external AI integrations
+    enable_jev: bool = True
+    enable_groq: bool = True
+
     @field_validator("gap_hmac_salt")
     @classmethod
     def _reject_known_dev_salt_in_production(cls, v: str) -> str:
@@ -88,7 +102,7 @@ class Settings(BaseSettings):
             raise ValueError("DOCAI_MAX_UPLOAD_BYTES must be positive")
         return min(v, 50 * 1024 * 1024)
 
-    model_config = SettingsConfigDict(env_prefix="", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="", env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()
