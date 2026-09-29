@@ -128,10 +128,12 @@ jobs:
 
       - name: Postgres carries the vector extension
         run: |
+          set +e
           for i in $(seq 1 36); do
-            if [ "$(docker compose -f infra/docker-compose.yml exec -T postgres \
+            got=$(docker compose -f infra/docker-compose.yml exec -T postgres \
               psql -U adivritti -d adivritti -tAc \
-              "SELECT 1 FROM pg_extension WHERE extname='vector';")" = "1" ]; then
+              "SELECT 1 FROM pg_extension WHERE extname='vector';" 2>/dev/null)
+            if [ "$got" = "1" ]; then
               echo "vector extension present"; exit 0
             fi
             sleep 5
@@ -141,6 +143,7 @@ jobs:
 
       - name: Flyway V1 migration applied
         run: |
+          set +e
           for i in $(seq 1 96); do
             got=$(docker compose -f infra/docker-compose.yml exec -T postgres \
               psql -U adivritti -d adivritti -tAc \
