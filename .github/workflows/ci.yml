@@ -126,20 +126,6 @@ jobs:
       - name: Start stack
         run: docker compose -f infra/docker-compose.yml up -d
 
-      # Poll-and-append rather than `logs -f`: a restart replaces the container
-      # and a follow detaches, which is exactly how the first version of this
-      # workflow ended up reporting a log containing only the Spring banner.
-      - name: Capture core logs while we wait
-        run: |
-          nohup bash -c 'for i in $(seq 1 200); do
-            echo "=== poll $i $(date -u +%H:%M:%S) ==="
-            docker compose -f infra/docker-compose.yml logs --no-color --tail=60 core 2>&1
-            echo "--- state ---"
-            docker compose -f infra/docker-compose.yml ps -a 2>&1
-            sleep 5
-          done' > "$RUNNER_TEMP/corelog.txt" 2>&1 &
-          echo "capture started as pid $!"
-
       - name: Postgres carries the vector extension
         run: |
           for i in $(seq 1 36); do
@@ -203,24 +189,23 @@ jobs:
           for svc in core ai postgres; do
             cid=$(docker compose -f infra/docker-compose.yml ps -q "$svc" 2>/dev/null)
             [ -n "$cid" ] || continue
-            echo "::error title=$svc inspect::status=$(docker inspect -f '{{.State.Status}}' "$cid") restarts=$(docker inspect -f '{{.RestartCount}}' "$cid") exit=$(docker inspect -f '{{.State.ExitCode}}' "$cid") started=$(docker inspect -f '{{.State.StartedAt}}' "$cid")"
+            echo "::error title=$svc::status=$(docker inspect -f '{{.State.Status}}' "$cid") restarts=$(docker inspect -f '{{.RestartCount}}' "$cid") exit=$(docker inspect -f '{{.State.ExitCode}}' "$cid") started=$(docker inspect -f '{{.State.StartedAt}}' "$cid") oom=$(docker inspect -f '{{.State.OOMKilled}}' "$cid")"
           done
 
-      - name: Core boot log (captured during the wait)
+      - name: Core boot log
         if: failure()
+        # The container is still alive (restarts=0), so its log is complete here.
+        # Dumped in file order with line numbers, because a chronological view is
+        # the only way to see where startup stopped. An earlier attempt ran this
+        # as a background loop, which Actions kills at step end, and so captured
+        # only the first few seconds.
         run: |
-          f="$RUNNER_TEMP/corelog.txt"
-          [ -f "$f" ] || { echo "::error title=core::no captured log"; exit 0; }
-          # Deduplicate the polled log, then keep only the informative lines:
-          # the error cause plus the tail, which is where a startup hang stops.
-          grep -E 'ERROR|Exception|Caused by|APPLICATION FAILED|Failed to|Could not|Unable to|WARN' "$f" \
-            | sort -u | tail -12 \
-            | while IFS= read -r l; do echo "::error title=core::${l}"; done
-          echo "::error title=core::---- final 12 distinct log lines ----"
-          sed -e 's/^[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}T[0-9:.]*Z* *//' -e 's/^core-1 *| *//' "$f" \
-            | grep -v '^=== poll' | grep -v '^--- state ---' | grep -v '^$' \
-            | awk '!seen[$0]++' | tail -12 \
-            | while IFS= read -r l; do echo "::error title=core::${l}"; done
+          f="$RUNNER_TEMP/core-full.log"
+          docker compose -f infra/docker-compose.yml logs --no-color --timestamps core > "$f" 2>&1 || true
+          echo "::error title=core::total log lines: $(wc -l < "$f")"
+          grep -nE 'ERROR|Exception|Caused by|APPLICATION FAILED|Failed to|Could not|Unable to|WARN' "$f" \
+            | head -12 | while IFS= read -r l; do echo "::error title=core err::${l}"; done
+          tail -22 "$f" | while IFS= read -r l; do echo "::error title=core tail::${l}"; done
 
       - name: Tear down
         if: always()
