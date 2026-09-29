@@ -184,46 +184,41 @@ jobs:
             -d '{"aadhaar_ref":"CI-SMOKE-001"}')
           echo "$body" | grep -q hashed_key || { echo "no hashed_key in: $body"; exit 1; }
 
-      - name: Core container state
+      - name: Diagnose the failure
         if: failure()
-        run: |
-          docker compose -f infra/docker-compose.yml ps -a 2>&1 \
-            | while IFS= read -r l; do echo "::error title=compose ps::${l}"; done
-          for svc in core ai postgres; do
-            cid=$(docker compose -f infra/docker-compose.yml ps -q "$svc" 2>/dev/null)
-            [ -n "$cid" ] || continue
-            echo "::error title=$svc::status=$(docker inspect -f '{{.State.Status}}' "$cid") restarts=$(docker inspect -f '{{.RestartCount}}' "$cid") exit=$(docker inspect -f '{{.State.ExitCode}}' "$cid") started=$(docker inspect -f '{{.State.StartedAt}}' "$cid") oom=$(docker inspect -f '{{.State.OOMKilled}}' "$cid")"
-          done
-
-      - name: Core boot log
-        if: failure()
-        # The container is still alive (restarts=0), so its log is complete here.
-        # Dumped in file order with line numbers, because a chronological view is
-        # the only way to see where startup stopped. An earlier attempt ran this
-        # as a background loop, which Actions kills at step end, and so captured
-        # only the first few seconds.
+        # One step, small and ordered. Earlier versions spread this over several
+        # steps and matched on "Could not", which Spring Data Redis emits as INFO
+        # for every JPA repository, so the annotations filled up with harmless
+        # noise and the actual error never made it out. Tail first: the cause of
+        # a startup failure is in the last lines.
         run: |
           f="$RUNNER_TEMP/core-full.log"
-          docker compose -f infra/docker-compose.yml logs --no-color --timestamps core > "$f" 2>&1 || true
-          echo "::error title=core::total log lines: $(wc -l < "$f")"
-          grep -nE 'ERROR|Exception|Caused by|APPLICATION FAILED|Failed to|Could not|Unable to|WARN' "$f" \
-            | head -12 | while IFS= read -r l; do echo "::error title=core err::${l}"; done
-          tail -22 "$f" | while IFS= read -r l; do echo "::error title=core tail::${l}"; done
+          docker compose -f infra/docker-compose.yml logs --no-color core > "$f" 2>&1 || true
+          echo "::error title=core::log lines: $(wc -l < "$f")"
+          echo "::error title=core::---- last 12 lines ----"
+          tail -12 "$f" | while IFS= read -r l; do echo "::error title=core tail::${l}"; done
+          echo "::error title=core::---- error lines ----"
+          grep -E 'ERROR|FATAL|APPLICATION FAILED TO START|Caused by:' "$f" | head -8 \
+            | while IFS= read -r l; do echo "::error title=core err::${l}"; done
+          echo "::error title=core::---- container state ----"
+          cid=$(docker compose -f infra/docker-compose.yml ps -aq core 2>/dev/null)
+          if [ -n "$cid" ]; then
+            echo "::error title=core::status=$(docker inspect -f '{{.State.Status}}' "$cid") exit=$(docker inspect -f '{{.State.ExitCode}}' "$cid") oom=$(docker inspect -f '{{.State.OOMKilled}}' "$cid") started=$(docker inspect -f '{{.State.StartedAt}}' "$cid") finished=$(docker inspect -f '{{.State.FinishedAt}}' "$cid")"
+          fi
 
-      - name: Thread dump of the stalled JVM
+      - name: Thread dump of a still-running core
         if: failure()
-        # SIGQUIT makes a JVM dump every thread stack to stdout, which lands in
-        # the container log. Distinguishes "hung on X" from "logged nothing"
-        # in one shot, and needs no jstack (the runtime image is a JRE).
+        # SIGQUIT dumps every thread stack to stdout, which lands in the
+        # container log, and needs no jstack (the runtime image is a JRE).
         run: |
-          docker compose -f infra/docker-compose.yml exec -T core sh -c \
-            'grep ^State /proc/1/status; echo "wchan: $(cat /proc/1/wchan 2>/dev/null)"; echo "threads: $(ls /proc/1/task | wc -l)"; kill -3 1' 2>&1 \
-            | while IFS= read -r l; do echo "::error title=core proc::${l}"; done
+          cid=$(docker compose -f infra/docker-compose.yml ps -q core 2>/dev/null)
+          if [ -z "$cid" ]; then exit 0; fi
+          [ "$(docker inspect -f '{{.State.Status}}' "$cid")" = "running" ] || exit 0
+          docker compose -f infra/docker-compose.yml exec -T core kill -3 1 || true
           sleep 5
           f="$RUNNER_TEMP/dump.log"
-          docker compose -f infra/docker-compose.yml logs --no-color --timestamps core > "$f" 2>&1 || true
-          echo "::error title=core::log lines after dump: $(wc -l < "$f")"
-          awk '/"main"/{p=1} p{print} p&&/^$/{exit}' "$f" | head -24 \
+          docker compose -f infra/docker-compose.yml logs --no-color core > "$f" 2>&1 || true
+          awk '/"main"/{p=1} p{print} p&&/^$/{exit}' "$f" | head -20 \
             | while IFS= read -r l; do echo "::error title=core main::${l}"; done
 
       - name: Tear down
