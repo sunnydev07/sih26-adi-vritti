@@ -42,7 +42,7 @@ docs/
   openapi/core.yaml  THE contract — all 13 endpoints
   specs/           System overview, demo path, GoVSim quirk catalogue
   adr/             Architecture decision records
-infra/             docker-compose (postgres + pgvector, redis, minio, services)
+infra/             docker-compose (postgres + pgvector, redis, services)
 ```
 
 ## Quickstart
@@ -50,7 +50,7 @@ infra/             docker-compose (postgres + pgvector, redis, minio, services)
 Prereqs: JDK 21, Python 3.13, Node 22, Docker.
 
 ```bash
-make dev        # boot postgres, redis, minio, govsim, core, ai (foreground)
+make dev        # boot postgres, redis, govsim, core, ai (foreground)
 make dev-detach # same, detached
 make seed       # load deterministic synthetic data (seed 26238)
 make test-core  # Java unit tests (Gradle wrapper, JDK 21)

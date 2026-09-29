@@ -92,7 +92,7 @@ init-db:
 		psql -v ON_ERROR_STOP=1 -U adivritti -d adivritti \
 		-f /docker-entrypoint-initdb.d/init.sql
 
-# DESTRUCTIVE: drops the pgdata and miniodata volumes, so the next `make dev`
+# DESTRUCTIVE: drops the pgdata volume, so the next `make dev`
 # starts from a blank database and the init script runs for real. This is the
 # one-time step required when upgrading from the pre-pgvector stack.
 clean: down
