@@ -63,13 +63,35 @@ public class DashboardService {
             long days = sla.daysElapsed(
                 a.createdAt == null ? ZonedDateTime.now() : a.createdAt);
             schemes.add(new SchemeStatus(
-                a.scheme, a.scheme, "in_progress",
+                a.scheme, a.scheme, deriveStatus(a.stage),
                 verdicts.getOrDefault(a.scheme, "unknown"),
                 a.stage, a.currentActor, (int) days, sla.slaDays(a.stage),
                 sumFor(pays, a.scheme, true), sumFor(pays, a.scheme, false)));
         }
 
         return new DashboardResponse(usid, schemes, money, pendingActions(usid));
+    }
+
+    /**
+     * Derive the contract {@code SchemeStatus.status} from the application stage.
+     * Previously every scheme was hard-coded to {@code "in_progress"} regardless of
+     * stage, against a contract enum of
+     * {@code eligible|applied|in_verification|approved|disbursed|deficient|not_eligible}.
+     * {@code deficient} is deliberately not derived here: deficiency rows carry no
+     * scheme linkage yet, so per-scheme deficiency needs schema work (follow-up).
+     * Unknown stages map to {@code in_verification} — mid-pipeline work, never a
+     * terminal claim about the outcome.
+     */
+    static String deriveStatus(String stage) {
+        if (stage == null) return "in_verification";
+        return switch (stage) {
+            case "submitted" -> "applied";
+            case "institute_verification", "district_nodal", "state_dept", "ministry" ->
+                "in_verification";
+            case "pfms_payment" -> "approved";
+            case "disbursed" -> "disbursed";
+            default -> "in_verification";
+        };
     }
 
     private MoneySnapshot moneySnapshot(List<Disbursement> pays) {
