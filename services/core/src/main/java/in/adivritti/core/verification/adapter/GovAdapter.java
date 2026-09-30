@@ -4,7 +4,10 @@ import in.adivritti.core.verification.dto.VerifyDtos.VerifyRequest;
 
 /**
  * GovSim adapter. Core treats govsim EXACTLY like real government APIs:
- * timeouts, circuit breakers (Resilience4j), retries with jitter at call site.
+ * timeouts, retries with backoff and a circuit breaker live in
+ * {@link GovsimClient} (programmatic Resilience4j, shared by every adapter);
+ * adapters only map responses to verdicts and degrade — never block — when a
+ * source is down.
  */
 public interface GovAdapter {
     String name();

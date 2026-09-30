@@ -25,7 +25,7 @@ public class ClaimsController {
     /** Claims contain income and bank identifiers, so the caller must own the USID. */
     @GetMapping
     ResponseEntity<ClaimsListResponse> list(@PathVariable UUID usid,
-        @RequestParam(defaultValue = "false") boolean includeExpired) {
+        @RequestParam(name = "include_expired", defaultValue = "false") boolean includeExpired) {
         access.check(usid);
         return ResponseEntity.ok(service.list(usid, includeExpired));
     }

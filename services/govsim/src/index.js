@@ -7,6 +7,11 @@
  * - Name variants across systems, missing Aadhaar on legacy rows,
  *   duplicate beneficiaries, UDISE+ students with no NSP record (the gap)
  *
+ * Verify OUTCOMES are deterministic per USID (stable hash; the demo student
+ * always passes), so the demo is reproducible and every system — including
+ * /digilocker/verify — has a genuine rejection path. Only the TRANSPORT
+ * chaos above stays random.
+ *
  * Full quirk catalogue: docs/specs/govsim-contracts.md
  */
 'use strict';
@@ -40,6 +45,24 @@ const DEMO_STUDENT = {
 };
 const NOS_DATES = ['17/08/2024', '2024-08-17', '1723852800']; // DD/MM/YYYY, ISO, epoch — per page!
 
+// --- Deterministic verify outcomes (FNV-1a hash over the USID) ---
+// Transport chaos stays random, but a verify DECISION must be reproducible:
+// the same USID gets the same answer on every call and every run, so the demo
+// is stable and Core's retry path cannot be confused with a changed answer.
+// The demo student always passes; other USIDs pass at the per-system rate,
+// which keeps a genuine rejection path for every system (including
+// /digilocker/verify, which used to rubber-stamp `verified: true`).
+function stableHash(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i += 1) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+const decide = (usid, salt, passRate) =>
+  usid === DEMO_STUDENT.usid || (stableHash(`${salt}:${usid}`) % 100) < Math.round(passRate * 100);
+
 // --- Chaos middleware ---
 const hits = new Map(); // ip -> timestamps (20 RPM window)
 function chaos(req, res, next) {
@@ -60,13 +83,23 @@ function chaos(req, res, next) {
 
 const app = express();
 app.use(express.json());
+
+// Health is a readiness probe, not a hostile system: it bypasses the chaos
+// middleware (random 500s, multi-second latency, rate-limit counter) so the
+// compose healthcheck, the CI `stack` job, and the test-suite readiness poll
+// get a truthful answer about whether the process is up. Health must never
+// consume the 20 RPM per-process rate-limit budget either: the readiness poll
+// fires before the suite runs, so counting it would move the limit window and
+// make the pinned 21st-request rate-limit assertion flaky.
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'govsim', chaos: CHAOS_ENABLED }));
+
 app.use(chaos);
 
 const verify = (verified, extra = {}) => ({ verified, ...extra });
 
 // NSP — SOAP-ish XML flavour, OTR lookup, legacy rows miss Aadhaar 15%
 app.get('/nsp/verify', (req, res) => {
-  const ok = req.query.usid === DEMO_STUDENT.usid || rnd() > 0.25;
+  const ok = decide(String(req.query.usid || ''), 'nsp', 0.75);
   res.json(verify(ok, { system: 'NSP', name: DEMO_STUDENT.nspName, otr_id: DEMO_STUDENT.otrId,
     aadhaar_ref_key: rnd() < 0.15 ? null : DEMO_STUDENT.aadhaarRefKey, format: 'soap-xml-ish' }));
 });
@@ -77,7 +110,7 @@ app.get('/nsp/applications', (req, res) => {
 
 // SFMP (Canara Bank) — flat CSV-in-JSON, different ID scheme + spelling
 app.get('/sfmp/verify', (req, res) => {
-  const ok = req.query.usid === DEMO_STUDENT.usid || rnd() > 0.35;
+  const ok = decide(String(req.query.usid || ''), 'sfmp', 0.65);
   res.json(verify(ok, { system: 'SFMP', name: DEMO_STUDENT.sfmpName, format: 'csv-in-json' }));
 });
 app.get('/sfmp/records', (req, res) => {
@@ -86,7 +119,8 @@ app.get('/sfmp/records', (req, res) => {
 
 // NOS — paginated, DIFFERENT date format on each page
 app.get('/nos/verify', (req, res) => {
-  res.json(verify(rnd() > 0.5, { system: 'NOS', name: DEMO_STUDENT.nosName }));
+  res.json(verify(decide(String(req.query.usid || ''), 'nos', 0.5),
+    { system: 'NOS', name: DEMO_STUDENT.nosName }));
 });
 app.get('/nos/records', (req, res) => {
   const page = parseInt(req.query.page || '1', 10);
@@ -119,16 +153,25 @@ app.get('/pfms/status', (req, res) => {
 
 // UGC-NTA — NET/JRF results
 app.get('/ugc-nta/verify', (req, res) => {
-  res.json(verify(rnd() > 0.6, { system: 'UGC-NTA', exam: 'NET-JRF' }));
+  res.json(verify(decide(String(req.query.usid || ''), 'ugc-nta', 0.4),
+    { system: 'UGC-NTA', exam: 'NET-JRF' }));
 });
 
-// DigiLocker proxy — stands in when the API Setu sandbox is down
+// DigiLocker proxy — stands in when the API Setu sandbox is down.
+// Deterministic per USID like the other systems: the demo student always
+// verifies, roughly 1 in 8 other USIDs is rejected with a reason_code, so
+// Core's corroboration tier actually exercises its rejection path.
 app.get('/digilocker/verify', (req, res) => {
-  res.json(verify(true, { system: 'DigiLocker-proxy',
-    note: 'sandbox fallback — swap for live API Setu in TASK 6.1',
-    documents: ['caste_certificate', 'income_certificate', 'domicile'] }));
+  const ok = decide(String(req.query.usid || ''), 'digilocker', 0.875);
+  if (ok) {
+    res.json(verify(true, { system: 'DigiLocker-proxy',
+      note: 'sandbox fallback — swap for live API Setu in TASK 6.1',
+      documents: ['caste_certificate', 'income_certificate', 'domicile'] }));
+    return;
+  }
+  res.json(verify(false, { system: 'DigiLocker-proxy',
+    reason_code: 'DOCUMENT_MISMATCH',
+    note: 'no matching issued document for this USID' }));
 });
-
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'govsim', chaos: CHAOS_ENABLED }));
 
 app.listen(PORT, () => console.log(`govsim listening on :${PORT} (chaos=${CHAOS_ENABLED})`));

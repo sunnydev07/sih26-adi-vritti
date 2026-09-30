@@ -26,17 +26,6 @@ export const coverageSchools: CoverageRegion[] = [
   { id: "SCH-103", name: "Ashram School Jagdalpur", level: "school", parentId: "CG-BAS-JAG", totalStudents: 88, applications: 22, pvtg: true },
 ];
 
-export function coveragePct(r: CoverageRegion): number {
-  if (r.totalStudents === 0) return 0;
-  return Math.round((r.applications / r.totalStudents) * 100);
-}
-
-export function coverageColor(pct: number): string {
-  if (pct < 20) return "#f43f5e";
-  if (pct < 60) return "#f59e0b";
-  return "#10b981";
-}
-
 export const outreachList: SchoolOutreachItem[] = [
   { id: "SCH-101", schoolName: "Govt HS Bichhiya, Mandla", district: "Mandla", classLevel: "Class IX", stStudents: 47, applications: 6, contact: "HM: +91-98XXXXXX21" },
   { id: "SCH-103", schoolName: "Ashram School Jagdalpur", district: "Bastar", classLevel: "Class IX–XII", stStudents: 88, applications: 22, contact: "Warden: +91-98XXXXXX77" },

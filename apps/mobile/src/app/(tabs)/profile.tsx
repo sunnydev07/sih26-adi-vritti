@@ -120,7 +120,7 @@ export default function ProfileScreen() {
             <Row
               icon="sync"
               title="Sync now"
-              sub={sync === "done" ? "Synced just now" : sync === "busy" ? "Syncing…" : "Pull the latest file status"}
+              sub={sync === "done" ? "Demo — nothing was synced (sync is not wired yet)" : sync === "busy" ? "Syncing…" : "Pull the latest file status"}
               onPress={syncNow}
               right={
                 sync === "busy" ? (

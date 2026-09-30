@@ -47,6 +47,14 @@ public class Claim {
     @Column(name = "verifier", length = 128)
     public String verifier;
 
+    /**
+     * Caller-supplied idempotency key (V2). NULL when the request carried none.
+     * Unique per scholar via a partial index, so a retried verification lands on
+     * the same wallet row instead of minting a duplicate claim.
+     */
+    @Column(name = "idempotency_key", length = 128)
+    public String idempotencyKey;
+
     @PrePersist
     void prePersist() {
         if (id == null) id = UUID.randomUUID();

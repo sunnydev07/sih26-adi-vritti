@@ -17,6 +17,8 @@ public class DigiLockerAdapter implements GovAdapter {
         // OAuth per-fetch consent; govsim proxy stands in when the sandbox is down.
         var res = govsim.get("/digilocker/verify?usid=" + req.usid() + "&claim=" + req.claimType());
         boolean ok = Boolean.TRUE.equals(res.get("verified"));
-        return new CheckResult(ok, ok ? 0.99 : 0.0, "DigiLocker issued document");
+        String note = ok ? "DigiLocker issued document"
+            : String.valueOf(res.getOrDefault("reason_code", "DigiLocker rejected document"));
+        return new CheckResult(ok, ok ? 0.99 : 0.0, note);
     }
 }

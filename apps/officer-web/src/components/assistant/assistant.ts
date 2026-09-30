@@ -158,10 +158,14 @@ export function answerLocal(raw: string, uiLang: AdiLang): AdiAnswer {
   };
 }
 
-const HELP_URL = "http://localhost:8000/jago/help";
-const AI_TOKEN = "dev-only-ai-service-token";
+/**
+ * Same-origin BFF proxy (src/app/api/jago/help/route.ts) holds the service
+ * token server-side, so the browser bundle never sees it. Unreachable BFF
+ * (non-OK status) falls through to the offline mirror below.
+ */
+const HELP_URL = "/api/jago/help";
 
-/** Online-first, offline-proof: AI service when reachable, local mirror otherwise. */
+/** Online-first, offline-proof: BFF when reachable, local mirror otherwise. */
 export async function askAdi(raw: string, uiLang: AdiLang): Promise<AdiAnswer> {
   const text = raw.trim();
   if (!text) return answerLocal("namaste", uiLang);
@@ -170,7 +174,7 @@ export async function askAdi(raw: string, uiLang: AdiLang): Promise<AdiAnswer> {
     const timeoutId = setTimeout(() => controller.abort(), 2500);
     const res = await fetch(HELP_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-ai-service-token": AI_TOKEN },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ question: text.slice(0, 500), lang: uiLang }),
       signal: controller.signal,
     });

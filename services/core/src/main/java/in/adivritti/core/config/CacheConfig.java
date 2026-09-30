@@ -1,5 +1,11 @@
 package in.adivritti.core.config;
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import java.time.Duration;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
@@ -13,6 +19,7 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 
 /**
  * Cache configuration.
@@ -38,7 +45,7 @@ public class CacheConfig implements CachingConfigurer {
             .serializeKeysWith(RedisSerializationContext.SerializationPair
                 .fromSerializer(new StringRedisSerializer()))
             .serializeValuesWith(RedisSerializationContext.SerializationPair
-                .fromSerializer(new GenericJackson2JsonRedisSerializer()));
+                .fromSerializer(jsonSerializer()));
 
         RedisCacheManager manager = RedisCacheManager.builder(connectionFactory)
             .cacheDefaults(base.entryTtl(ttls.defaultTtl()))
@@ -48,6 +55,47 @@ public class CacheConfig implements CachingConfigurer {
             .transactionAware()
             .build();
         return manager;
+    }
+
+    /**
+     * Jackson serializer for cache values.
+     *
+     * <p>{@code new GenericJackson2JsonRedisSerializer()} builds a bare
+     * {@code ObjectMapper}: it never calls {@code findAndRegisterModules()}, so Java
+     * time types have no serializer at all. Caching a {@code VerifyResponse} — which
+     * carries {@code validUntil} and {@code attemptedAt} — therefore threw on every
+     * put, the {@link CacheErrorHandler} below classified it as a cache outage and
+     * logged a WARN, and the verification cache was a permanent miss that looked
+     * healthy. Registering {@link JavaTimeModule}, and writing ISO-8601 rather than
+     * epoch timestamps (the contract's date convention), fixes the put.
+     *
+     * <p>Default typing is kept because cache values are held as {@code Object}:
+     * without a type hint the read hands back a {@code LinkedHashMap} and the caller
+     * dies on a cast. It is narrow, though — only the packages that can appear in
+     * cached values — so a tampered Redis entry cannot name an arbitrary class for
+     * Jackson to instantiate.
+     */
+    static GenericJackson2JsonRedisSerializer jsonSerializer() {
+        ObjectMapper mapper = Jackson2ObjectMapperBuilder.json()
+            .modules(new JavaTimeModule())
+            // ISO-8601 on the wire, and do not silently re-zone what is read back:
+            // the default UTC adjustment made a cache hit render a different offset
+            // (+05:30 became Z) from a fresh, uncached read of the same instant.
+            .featuresToDisable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS,
+                DeserializationFeature.ADJUST_DATES_TO_CONTEXT_TIME_ZONE)
+            .build();
+        mapper.activateDefaultTyping(
+            BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("in.adivritti.")
+                .allowIfSubType("java.util.")
+                .allowIfSubType("java.time.")
+                .allowIfSubType("java.lang.")
+                .allowIfSubType("java.math.")
+                .build(),
+            ObjectMapper.DefaultTyping.EVERYTHING,
+            JsonTypeInfo.As.PROPERTY);
+        GenericJackson2JsonRedisSerializer.registerNullValueSerializer(mapper, null);
+        return new GenericJackson2JsonRedisSerializer(mapper);
     }
 
     /**

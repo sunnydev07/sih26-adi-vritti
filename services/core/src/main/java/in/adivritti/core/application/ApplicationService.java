@@ -52,6 +52,21 @@ public class ApplicationService {
             deadline, sla.daysElapsed(stageEnteredAt), trail);
     }
 
+    /**
+     * The owning USID of an application, so a controller can authorise the caller
+     * before the timeline is read. A timeline carries stage changes, the acting
+     * officer's name and free-text notes, so knowing a UUID must not be enough to read
+     * it. Deliberately throws the same 404 the timeline would: an unauthorised caller
+     * must not be able to tell "no such application" from "not yours".
+     */
+    @Transactional(readOnly = true)
+    public UUID usidOf(UUID id) {
+        if (id == null) throw new NotFoundException("APPLICATION_NOT_FOUND", "Application not found");
+        return applications.findById(id)
+            .map(a -> a.usid)
+            .orElseThrow(() -> new NotFoundException("APPLICATION_NOT_FOUND", "Application not found"));
+    }
+
     @Transactional(readOnly = true)
     public List<Application> forScholar(UUID usid) {
         return usid == null ? List.of() : applications.findByUsidOrderByCreatedAtDesc(usid);

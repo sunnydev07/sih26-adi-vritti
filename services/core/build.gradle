@@ -37,6 +37,15 @@ dependencies {
     implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'org.postgresql:postgresql'
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+    // ADR-001 mandates startup validation of packages/rules/*.json against
+    // packages/rules/schema.json. networknt is the reference implementation and
+    // works directly on Jackson nodes, so no second JSON model is needed.
+    implementation 'com.networknt:json-schema-validator:1.5.9'
+    // Regenerates the OpenAPI spec from the running app at /v3/api-docs. The CI
+    // contract-drift check diffs it against docs/openapi/core.yaml, so the
+    // hand-written contract can never silently diverge from the controllers.
+    // -api (not -ui): no Swagger UI, just the machine-readable document.
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:2.8.17'
     implementation 'com.github.ben-manes.caffeine:caffeine'
     testImplementation('org.springframework.boot:spring-boot-starter-test') {
         exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'

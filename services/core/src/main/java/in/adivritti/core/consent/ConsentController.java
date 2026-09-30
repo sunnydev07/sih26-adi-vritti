@@ -41,14 +41,18 @@ public class ConsentController {
 
     @DeleteMapping("/v1/consent/{id}")
     ResponseEntity<ConsentDto> revoke(@PathVariable UUID id) {
+        // Without this any authenticated caller could revoke any consent by UUID, which
+        // is both a denial-of-service on the scholar and a DPDP breach of their control
+        // over their own data.
+        access.check(service.usidOf(id));
         return ResponseEntity.ok(service.revoke(id));
     }
 
     /** The access audit is the DPDP "who looked at my data" record — officer-only. */
     @GetMapping("/v1/scholars/{usid}/audit")
     ResponseEntity<AuditPage> audit(@PathVariable UUID usid,
-        @RequestParam(defaultValue = "1") @Min(1) int page,
-        @RequestParam(defaultValue = "20") @Min(1) @Max(100) int pageSize) {
+        @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
+        @RequestParam(name = "page_size", defaultValue = "20") @Min(1) @Max(100) int pageSize) {
         access.check(usid);
         // Service pages are 0-indexed; the contract is 1-indexed.
         return ResponseEntity.ok(service.audit(usid, page - 1, pageSize));

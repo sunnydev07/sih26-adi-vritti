@@ -7,7 +7,7 @@ import { GlassCard, NumberTicker } from "@/components/effects/premium";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/controls";
 import { api } from "@/lib/api";
-import { coverageColor, coveragePct } from "@/__mocks__/geo-identity";
+import { coverageColor, coveragePct } from "@/lib/coverage";
 import type { CoverageRegion } from "@/types";
 
 const LEVEL_LABEL: Record<CoverageRegion["level"], string> = {
@@ -39,7 +39,7 @@ export default function CoverageGapPage() {
 
   function drill(region: CoverageRegion) {
     if (region.level === "school") {
-      toast(`${region.name}: outreach drafted`);
+      toast(`Demo: ${region.name} outreach drafted locally — nothing sent.`);
       return;
     }
     setTrail((t) => [...t, region]);
@@ -148,7 +148,7 @@ export default function CoverageGapPage() {
                 </p>
                 <p className="mt-1 font-mono text-xs text-[var(--muted-foreground)]">{o.contact}</p>
                 <button
-                  onClick={() => toast(`Outreach sent to ${o.schoolName}`)}
+                  onClick={() => toast(`Demo: outreach staged for ${o.schoolName} — nothing sent.`)}
                   className="mt-2 rounded-full bg-[#312E81] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#4338CA]"
                 >
                   Send Outreach

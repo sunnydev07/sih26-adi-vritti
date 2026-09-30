@@ -44,12 +44,13 @@ before(async () => {
   });
   server.stderr.on('data', (chunk) => process.stderr.write(`[govsim] ${chunk}`));
 
+  // The readiness probe hits /health WITHOUT the header now: /health bypasses
+  // the chaos middleware (registered before it in src/index.js), so a plain
+  // probe is the correct assertion that the process is up and the bypass holds.
   for (let attempt = 0; attempt < 60; attempt += 1) {
     if (serverExit) break;
     try {
-      // The readiness probe itself needs the header: without it the poll would
-      // randomly fail on an injected 500 or a truncated body.
-      const res = await fetch(`${BASE}/health`, { headers: NO_CHAOS });
+      const res = await fetch(`${BASE}/health`);
       if (res.ok) {
         await res.text();
         return;
@@ -86,7 +87,18 @@ async function get(pathname, headers = NO_CHAOS) {
   return { status: res.status, text, json };
 }
 
-test('health reports ok and chaos enabled', async () => {
+test('health reports ok without the chaos header and skips the rate-limit window', async () => {
+  // No NO_CHAOS header on purpose: this is the assertion that /health bypasses
+  // the chaos middleware. With chaos on (pinned above) and no header, any
+  // pass through chaos() would randomly 500, truncate, delay, or at minimum
+  // consume a slot of the shared 20 RPM window -- all of which this test pins
+  // against. Five consecutive plain probes must all answer 200.
+  for (let i = 0; i < 5; i += 1) {
+    const plain = await get('/health', {});
+    assert.strictEqual(plain.status, 200, `plain /health probe ${i} failed: ${plain.text}`);
+    assert.strictEqual(plain.json.status, 'ok');
+    assert.strictEqual(plain.json.service, 'govsim');
+  }
   const { status, json } = await get('/health');
   assert.strictEqual(status, 200);
   assert.strictEqual(json.status, 'ok');
@@ -170,6 +182,45 @@ test('PFMS taxonomy covers all six codes', async () => {
     assert.ok(observed === null || codes.includes(observed),
       `unexpected failure_code from the endpoint: ${observed}`);
   }
+});
+
+test('verify outcomes are deterministic per USID and the demo student always passes', async () => {
+  // Verify DECISIONS are a pure function of the USID (stable hash in
+  // src/index.js), while transport chaos stays random. Same USID, same
+  // answer, every call -- this is what makes the demo reproducible.
+  const demo = '11111111-1111-4111-8111-111111111111';
+  const paths = ['/nsp/verify', '/sfmp/verify', '/nos/verify', '/ugc-nta/verify', '/digilocker/verify'];
+  for (const path of paths) {
+    const first = await get(`${path}?usid=${demo}`);
+    assert.strictEqual(first.status, 200);
+    assert.strictEqual(first.json.verified, true, `${path} must verify the demo student`);
+    const second = await get(`${path}?usid=${demo}`);
+    assert.strictEqual(second.json.verified, true, `${path} changed its answer for the same USID`);
+  }
+  const probe = '22222222-2222-4222-8222-222222222222';
+  for (const path of paths) {
+    const a = await get(`${path}?usid=${probe}`);
+    const b = await get(`${path}?usid=${probe}`);
+    assert.strictEqual(a.json.verified, b.json.verified,
+      `${path} gave different answers for the same USID`);
+  }
+});
+
+test('digilocker has a genuine, stable rejection path', async () => {
+  // The proxy used to rubber-stamp verified:true. Now ~1 in 8 non-demo USIDs
+  // is rejected with a reason_code, deterministically -- probe until one is
+  // found (expected after ~8 draws; capped far above any flake probability).
+  let rejected = null;
+  for (let i = 0; i < 200 && rejected === null; i += 1) {
+    const usid = `probe-${i}-0000-4000-8000-000000000000`;
+    const res = await get(`/digilocker/verify?usid=${usid}`);
+    assert.strictEqual(res.status, 200);
+    if (res.json.verified === false) rejected = { usid, body: res.json };
+  }
+  assert.ok(rejected, 'expected a rejected USID within 200 deterministic draws');
+  assert.strictEqual(rejected.body.reason_code, 'DOCUMENT_MISMATCH');
+  const again = await get(`/digilocker/verify?usid=${rejected.usid}`);
+  assert.strictEqual(again.json.verified, false, 'rejection must be stable across calls');
 });
 
 // Kept last: it is the only test that lets requests through the chaos

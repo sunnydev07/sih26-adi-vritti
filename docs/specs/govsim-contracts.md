@@ -14,8 +14,8 @@ retries with jitter, idempotency keys). Disable chaos per-request with
 | 3 | NOS | `/nos` | Paginated JSON | DIFFERENT date format per page: p1 `DD/MM/YYYY`, p2 `YYYY-MM-DD`, p3 epoch |
 | 4 | UDISE+/APAAR | `/udise` | JSON | Enrolment + AISHE codes; includes students with zero NSP record (the coverage gap) |
 | 5 | PFMS/DBT | `/pfms` | JSON | Full 6-code rejection taxonomy (`E001`–`E006`) |
-| 6 | UGC-NTA | `/ugc-nta` | JSON | NET/JRF results; flaky (~40% negative) |
-| 7 | DigiLocker proxy | `/digilocker` | JSON | Fallback when the API Setu sandbox is down; swap for live in TASK 6.1 |
+| 6 | UGC-NTA | `/ugc-nta` | JSON | NET/JRF results; ~40% verify positive (deterministic per USID) |
+| 7 | DigiLocker proxy | `/digilocker` | JSON | Fallback when the API Setu sandbox is down; swap for live in TASK 6.1. Deterministic per USID: demo student always verifies, ~1 in 8 other USIDs rejected with `reason_code: DOCUMENT_MISMATCH` |
 
 ## Chaos profile
 
@@ -25,6 +25,15 @@ retries with jitter, idempotency keys). Disable chaos per-request with
 | Latency spike 1.5–4s | 10% of requests | 5s timeout + circuit breaker per adapter |
 | Truncated JSON | 2% | Schema validation → degrade to next tier |
 | Rate limit 429 | >20 RPM per IP | Backoff; `retry_after_seconds: 30` |
+
+## Deterministic verify outcomes
+
+Transport chaos above stays random, but a verify DECISION is a pure function
+of the USID (stable FNV-1a hash in `src/index.js`): the same USID gets the
+same answer on every call and every run. Pass rates: NSP 75%, SFMP 65%,
+NOS 50%, UGC-NTA 40%, DigiLocker-proxy 87.5%. The demo student
+(`11111111-1111-4111-8111-111111111111`) always verifies, so the demo path is
+stable while every system keeps a genuine rejection path.
 
 ## Dirty-data catalogue (deterministic, seed 26238)
 

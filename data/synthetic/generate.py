@@ -20,15 +20,48 @@ Outputs (into <out>/):
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import hashlib
+import hmac
 import json
 import random
 import sys
+import uuid
 from datetime import date, timedelta
 from pathlib import Path
 
 SEED = 26238  # PS number as seed
+
+# Deterministic namespace for seeded UUIDs: re-runs emit identical keys, so
+# seed.sql is stable across regenerations and idempotent on re-apply.
+SEED_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://adivritti.in/synthetic-seed")
+
+# Dev-stack vault material. These are the SAME published dev-only defaults as
+# infra/docker-compose.yml and application-dev.yml, used ONLY to derive seeded
+# reference keys that the dev Core build resolves. Never real secrets.
+_DEV_VAULT_HMAC_KEY_B64 = "ZGV2LW9ubHktaG1hYy1rZXktMzItYnl0ZXMtbG9uZyE="
+_DEV_VAULT_KEY_ID = "v1"
+_DEV_GAP_HMAC_SALT = "dev-salt-rotate-in-prod"
+
+
+def vault_ref_key(aadhaar_ref: str) -> str:
+    """Derive the AVR1:<keyId>:<hex> reference key AadhaarVault would store.
+
+    The generator never sees a real Aadhaar number (only synthetic
+    ``ref_key`` tokens), so this HMACs the token under the dev vault key.
+    Shape matches AadhaarVault.referenceKey exactly; Core's
+    findByAadhaarRefKey reads $.aadhaarRefKey, which is where seed.sql puts it.
+    """
+    key = base64.b64decode(_DEV_VAULT_HMAC_KEY_B64)
+    digest = hmac.new(key, aadhaar_ref.encode(), hashlib.sha256).hexdigest()
+    return f"AVR1:{_DEV_VAULT_KEY_ID}:{digest}"
+
+
+def gap_hashed_key(aadhaar_ref: str) -> str:
+    """Coverage-candidate hashed key under the dev GAP_HMAC_SALT."""
+    return hmac.new(_DEV_GAP_HMAC_SALT.encode(), aadhaar_ref.encode(),
+                    hashlib.sha256).hexdigest()
 
 STATES = {
     "Madhya Pradesh": ["Mandla", "Jhabua", "Dindori"],
@@ -243,25 +276,139 @@ def main() -> int:
         })
     write_csv(out / "failed_disbursements.csv", failures)
 
-    # SQL inserts (scholars only — keeps seed.sql small; bulk via COPY in prod)
+    # SQL seed: scholars + every read model the service layer queries.
+    #
+    # Previously only `scholar` rows were emitted, so the dashboard, claims,
+    # applications, disbursements and coverage-gap endpoints had nothing to
+    # read in a seeded dev stack, and the two real defects below made even the
+    # scholar rows unusable:
+    #   1. `uuid_generate_v4()` needs the uuid-ossp extension, which the
+    #      pgvector image path does not guarantee (V1 uses gen_random_uuid()
+    #      precisely to avoid it). seed.sql now uses gen_random_uuid() for
+    #      fresh rows and FIXED UUIDs for a small deterministic demo set.
+    #   2. the vault key was stored under "ref", while
+    #      ScholarRepository.findByAadhaarRefKey reads $.aadhaarRefKey, so the
+    #      duplicate lookup could never match seeded data.
+    #
+    # Determinism: row UUIDs are uuid5(SEED namespace, student_id), so a
+    # re-run emits the same keys. Inserts are ON CONFLICT DO NOTHING, so the
+    # file is idempotent. Reference keys are HMAC-SHA256 under the dev vault
+    # key (the same shape AadhaarVault.referenceKey produces), so seeded
+    # scholars resolve through the same lookup path as live data.
+    # Claim payloads CANNOT be produced here: claim.value_encrypted is
+    # AES-256-GCM under CLAIM_VAULT_KEY and this stdlib-only generator has no
+    # AES. Use POST /v1/verify to populate the wallet instead; fixtures.json
+    # carries the demo USIDs for that walkthrough.
+    demo_usids = [str(uuid.uuid5(SEED_NAMESPACE, f"demo-scholar-{i}")) for i in range(5)]
+    seed_rows = students[: 500 if args.demo else 5000]
+    seed_usid = {}
+    for idx, s in enumerate(seed_rows):
+        if idx < len(demo_usids):
+            seed_usid[s["student_id"]] = demo_usids[idx]
+        else:
+            seed_usid[s["student_id"]] = str(uuid.uuid5(SEED_NAMESPACE, s["student_id"]))
     with (out / "seed.sql").open("w", encoding="utf-8") as f:
         f.write("-- Adi-Vritti synthetic seed. Generated with SEED=26238. No real PII.\n")
-        for s in students[: 500 if args.demo else 5000]:
+        f.write("-- Idempotent: safe to re-run (ON CONFLICT DO NOTHING).\n")
+        for s in seed_rows:
             name = s["full_name"].replace("'", "''")
+            ref = vault_ref_key(s["aadhaar_ref_key"])
+            demo = json.dumps({
+                "name": name,
+                "aadhaarRefKey": ref,
+                "district": s["district"],
+                "state": s["state"],
+            }, ensure_ascii=False).replace("'", "''")
             f.write(
                 "INSERT INTO scholar (usid, demographics) VALUES "
-                f"(uuid_generate_v4(), '{{\"name\": \"{name}\", \"ref\": \"{s['aadhaar_ref_key']}\"}}');\n"
+                f"('{seed_usid[s['student_id']]}', '{demo}'::jsonb) "
+                "ON CONFLICT (usid) DO NOTHING;\n"
             )
 
-    # Small hand-picked E2E demo fixture
+        # Identity links: NSP for every seeded scholar, SFMP for most.
+        for s in seed_rows:
+            usid = seed_usid[s["student_id"]]
+            f.write(
+                "INSERT INTO scholar_system_link "
+                "(id, usid, system_name, external_id, match_confidence, resolution_method) VALUES "
+                f"(gen_random_uuid(), '{usid}', 'NSP', 'NSP-{s['student_id']}', 1.0, 'deterministic') "
+                "ON CONFLICT (system_name, external_id) DO NOTHING;\n"
+            )
+            if int(s["student_id"].split("-")[1]) % 5 != 0:
+                f.write(
+                    "INSERT INTO scholar_system_link "
+                    "(id, usid, system_name, external_id, match_confidence, resolution_method) VALUES "
+                    f"(gen_random_uuid(), '{usid}', 'SFMP', 'SFMP-{s['student_id']}', 0.95, 'corroborated') "
+                    "ON CONFLICT (system_name, external_id) DO NOTHING;\n"
+                )
+        # One application per NSP row (submitted stage = start of the loop).
+        for s in nsp:
+            usid = seed_usid.get(s["student_id"])
+            if usid is None:
+                continue
+            f.write(
+                "INSERT INTO application "
+                "(id, usid, scheme, academic_year, stage, current_actor) VALUES "
+                f"(gen_random_uuid(), '{usid}', '{s['scheme']}', '2026-27', 'submitted', 'institute') "
+                "ON CONFLICT DO NOTHING;\n"
+            )
+        # Disbursements mirror the PFMS failure sample (failed rows carry the
+        # taxonomy code; the null-code draw becomes a paid row).
+        fail_sample = failures[: 200 if args.demo else 900]
+        for fail in fail_sample:
+            usid = seed_usid.get(fail["student_id"])
+            if usid is None:
+                continue
+            code = fail["failure_code"]
+            if code:
+                f.write(
+                    "INSERT INTO disbursement "
+                    "(id, usid, scheme, sanctioned_amount_paise, paid_amount_paise, "
+                    "pfms_ref, failure_code, failure_reason, status) VALUES "
+                    f"(gen_random_uuid(), '{usid}', '{fail['scheme']}', "
+                    f"{fail['sanctioned_amount_paise']}, 0, '{fail['pfms_ref']}', "
+                    f"'{code}', 'Seeded PFMS failure {code}', 'failed') "
+                    "ON CONFLICT DO NOTHING;\n"
+                )
+            else:
+                f.write(
+                    "INSERT INTO disbursement "
+                    "(id, usid, scheme, sanctioned_amount_paise, paid_amount_paise, "
+                    "pfms_ref, failure_code, failure_reason, status) VALUES "
+                    f"(gen_random_uuid(), '{usid}', '{fail['scheme']}', "
+                    f"{fail['sanctioned_amount_paise']}, {fail['sanctioned_amount_paise']}, "
+                    f"'{fail['pfms_ref']}', NULL, NULL, 'paid') "
+                    "ON CONFLICT DO NOTHING;\n"
+                )
+        # Coverage candidates: students with NO NSP record are the gap the
+        # officer console aggregates. Hashed under the dev GAP_HMAC_SALT.
+        nsp_ids = {s["student_id"] for s in nsp}
+        gap_pool = [s for s in students[: 200 if args.demo else 2000]
+                    if s["student_id"] not in nsp_ids]
+        for s in gap_pool:
+            hkey = gap_hashed_key(s["aadhaar_ref_key"])
+            cls = 9 if int(s["student_id"].split("-")[1]) % 2 == 0 else 10
+            gender = "F" if s["gender"] == "F" else "M"
+            f.write(
+                "INSERT INTO coverage_candidate "
+                "(id, hashed_key, state, district, block, school, class_level, gender, "
+                "pvtg_status, outreach_status) VALUES "
+                f"(gen_random_uuid(), '{hkey}', '{s['state']}', '{s['district']}', "
+                f"'{s['block']}', '{s['school']}', {cls}, '{gender}', FALSE, 'unreached') "
+                "ON CONFLICT (hashed_key) DO NOTHING;\n"
+            )
+
+    # Small hand-picked E2E demo fixture (demo_usids anchor the first 5 seed rows)
     demo_student = students[0]
     fixtures = {
         "seed": SEED,
+        "demo_usids": demo_usids,
         "demo_student": {
             "student_id": demo_student["student_id"],
+            "usid": demo_usids[0],
             "full_name": demo_student["full_name"],
             "nsp_variant": variant_name(random.Random(SEED + 1), demo_student["full_name"]),
-            "aadhaar_ref_key": demo_student["aadhaar_ref_key"],
+            "aadhaar_ref_key": vault_ref_key(demo_student["aadhaar_ref_key"]),
             "district": demo_student["district"],
             "school": demo_student["school"],
         },

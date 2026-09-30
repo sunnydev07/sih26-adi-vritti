@@ -26,6 +26,12 @@ spring:
       port: ${SPRING_REDIS_PORT:6379}
   cache:
     type: redis
+  jackson:
+    # docs/openapi/core.yaml is the contract and it is snake_case end to end
+    # (claim_id, valid_until, page_size, include_expired, ...). Without this the
+    # runtime emitted camelCase, so every generated client failed to bind a single
+    # field, and contract-legal request bodies were rejected by bean validation.
+    property-naming-strategy: SNAKE_CASE
 
 server:
   port: ${SERVER_PORT:8080}

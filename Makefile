@@ -22,7 +22,7 @@ help:
 	@echo "make down       - stop the stack"
 	@echo "make logs       - tail logs from every service"
 	@echo "make test       - run core + ai test suites"
-	@echo "make seed       - regenerate synthetic demo data"
+	@echo "make seed       - regenerate synthetic demo data AND load it into postgres"
 	@echo "make api        - regenerate the API client from docs/openapi/core.yaml"
 	@echo "make init-db    - apply the DB extensions to a RUNNING database (see infra/init-db.sql)"
 	@echo "make clean      - stop the stack and delete volumes"
@@ -78,6 +78,9 @@ api:
 
 seed:
 	cd data/synthetic && python3 generate.py
+	$(COMPOSE) $(COMPOSE_FILES) exec -T postgres \
+		psql -v ON_ERROR_STOP=1 -U adivritti -d adivritti \
+		< data/synthetic/output/seed.sql
 
 # /docker-entrypoint-initdb.d/*.sql is executed by the postgres entrypoint ONLY
 # when PGDATA is empty, so this file never runs against a volume that already

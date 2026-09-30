@@ -55,13 +55,26 @@ jobs:
           fi
           echo "$out" | tail -20
 
+      - name: Apply V2__idempotency.sql
+        run: |
+          set +e
+          out=$(psql "postgresql://adivritti:adivritti_dev@localhost:5432/adivritti" \
+            -v ON_ERROR_STOP=1 -f services/core/src/main/resources/db/migration/V2__idempotency.sql 2>&1); rc=$?
+          if [ $rc -ne 0 ]; then
+            echo "$out" | while IFS= read -r l; do echo "::error title=V2__idempotency.sql::${l}"; done
+            exit 1
+          fi
+          echo "$out" | tail -10
+
       - name: Assert the schema landed
         run: |
           url="postgresql://adivritti:adivritti_dev@localhost:5432/adivritti"
           n=$(psql "$url" -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';")
           echo "public tables: $n"
-          [ "$n" -ge 12 ] || { echo "::error title=V1::expected >=12 tables, found $n"; exit 1; }
+          [ "$n" -ge 13 ] || { echo "::error title=V1+V2::expected >=13 tables, found $n"; exit 1; }
           psql "$url" -tAc "SELECT extname FROM pg_extension WHERE extname='vector';"
+          psql "$url" -tAc "SELECT to_regclass('public.identity_resolution');"
+          psql "$url" -tAc "SELECT column_name FROM information_schema.columns WHERE table_name='claim' AND column_name='idempotency_key';"
 
       - name: Re-running V1 must be a no-op
         run: |
@@ -70,6 +83,15 @@ jobs:
           psql "postgresql://adivritti:adivritti_dev@localhost:5432/adivritti" \
             -v ON_ERROR_STOP=1 -q \
             -f services/core/src/main/resources/db/migration/V1__initial_schema.sql
+
+      - name: Re-running V2 must be a no-op
+        run: |
+          # IF NOT EXISTS DDL plus the partial unique index must survive a
+          # second pass (ALTER TABLE ... ADD COLUMN IF NOT EXISTS is safe;
+          # CREATE UNIQUE INDEX IF NOT EXISTS is safe).
+          psql "postgresql://adivritti:adivritti_dev@localhost:5432/adivritti" \
+            -v ON_ERROR_STOP=1 -q \
+            -f services/core/src/main/resources/db/migration/V2__idempotency.sql
 
   core:
     runs-on: ubuntu-latest
@@ -94,6 +116,29 @@ jobs:
         working-directory: services/ai
       - run: python -m pytest tests/ -q
         working-directory: services/ai
+
+  api-client:
+    # The generated client is gitignored by design (regenerable artifact), so
+    # this job proves the contract is generatable and the output compiles.
+    # A red job here means docs/openapi/core.yaml broke `make api`.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+        working-directory: packages/api-client
+      - run: npm run generate
+        working-directory: packages/api-client
+      - name: Typecheck the generated TypeScript client
+        run: |
+          npm install --no-save --no-audit --no-fund typescript@5.6
+          files=$(cd typescript && ls index.ts runtime.ts apis/*.ts models/*.ts | sed 's|^|typescript/|')
+          ./node_modules/.bin/tsc --noEmit --strict --skipLibCheck \
+            --target es2020 --lib es2020,dom --module esnext --moduleResolution bundler \
+            $files
+        working-directory: packages/api-client
 
   govsim:
     runs-on: ubuntu-latest
@@ -141,19 +186,19 @@ jobs:
           echo "::error title=pgvector::vector extension never appeared"
           exit 1
 
-      - name: Flyway V1 migration applied
+      - name: Flyway V1+V2 migrations applied
         run: |
           set +e
           for i in $(seq 1 96); do
             got=$(docker compose -f infra/docker-compose.yml exec -T postgres \
               psql -U adivritti -d adivritti -tAc \
               "SELECT version FROM flyway_schema_history ORDER BY installed_rank DESC LIMIT 1;" 2>/dev/null)
-            if [ "$got" = "1" ]; then
-              echo "V1 applied"; exit 0
+            if [ "$got" = "2" ]; then
+              echo "V1+V2 applied"; exit 0
             fi
             sleep 5
           done
-          echo "::error title=flyway::flyway_schema_history never gained V1 after 480s"
+          echo "::error title=flyway::flyway_schema_history never gained V2 after 480s"
           exit 1
 
       - name: Core actuator reports UP
@@ -170,6 +215,20 @@ jobs:
         run: |
           curl -sf http://localhost:8000/health > /dev/null
           curl -sf http://localhost:4000/health > /dev/null
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Contract drift check (core.yaml vs running app)
+        run: |
+          # springdoc regenerates the spec from the live controllers; the
+          # hand-written contract must match it structurally. A red step here
+          # means a controller changed without updating docs/openapi/core.yaml
+          # (or vice versa) — fix the drift, do not delete the check.
+          curl -sf http://localhost:8080/v3/api-docs > "$RUNNER_TEMP/live.json"
+          npx -y js-yaml@4 docs/openapi/core.yaml > "$RUNNER_TEMP/core.json"
+          node scripts/check-contract-drift.mjs "$RUNNER_TEMP/core.json" "$RUNNER_TEMP/live.json"
 
       - name: AI auth gate is live
         run: |

@@ -329,7 +329,11 @@ paths:
           in: query
           schema:
             type: string
-            enum: [breach_risk, sla_deadline, stp_score]
+            # stp_score is a documented ExceptionItem field but is not a sortable
+            # column: it is emitted as 0.0 until the STP scorer lands, so listing it
+            # here advertised an ordering the service cannot honour. created_at is
+            # accepted by the service and is now documented to match.
+            enum: [breach_risk, sla_deadline, created_at]
             default: breach_risk
         - name: stage
           in: query
@@ -438,6 +442,11 @@ components:
 
     LinkedSystemRecord:
       type: object
+      description: >
+        Resolution report for one cross-portal record, not a dump of persisted rows.
+        deterministic and above-ceiling probabilistic entries are written as
+        ScholarSystemLink rows; human_adjudication and below-floor entries are
+        reported here and wait for an officer (see needs_human_review).
       required: [system_name, external_id, confidence, resolution_method]
       properties:
         system_name: { type: string }

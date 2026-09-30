@@ -125,6 +125,6 @@ is safe to re-run.
 
 | Integration | Status |
 |---|---|
-| DigiLocker via API Setu sandbox | LIVE |
+| DigiLocker via API Setu sandbox | Contract-ready (GoVSim proxy) — see `docs/specs/govsim-contracts.md`; swap for live API Setu in TASK 6.1 |
 | NSP / SFMP / NOS / PFMS / UGC-NTA | Contract-ready (GoVSim) — see `docs/specs/govsim-contracts.md` |
 | Bhashini ASR/NMT/TTS (Hindi, English + tribal languages) | Contract-ready |

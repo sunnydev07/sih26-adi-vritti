@@ -114,7 +114,9 @@ export default function ClaimDetailScreen() {
                 <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
                   <Ionicons name="checkmark-circle" size={22} color="#047857" />
                   <Tx variant="caption" weight="semibold" color="#047857" style={{ flex: 1 }}>
-                    Request sent — your fresh copy will appear here once DigiLocker responds.
+                    Demo only — refetch is staged locally, no network call. In
+                    integration this refetches the document from DigiLocker
+                    via POST /v1/verify.
                   </Tx>
                 </View>
               </Card>

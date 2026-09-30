@@ -7,6 +7,7 @@ import in.adivritti.core.common.util.ClaimValueCipher;
 import in.adivritti.core.eligibility.dto.EligibilityDtos.EligibilityRequest;
 import in.adivritti.core.eligibility.dto.EligibilityDtos.EligibilityResponse;
 import in.adivritti.core.eligibility.dto.EligibilityDtos.EligibilityResponse.SchemeVerdict;
+import in.adivritti.core.eligibility.repository.SchemeRuleVersionRepository;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,6 +38,7 @@ public class EligibilityService {
     private final RuleEngine engine;
     private final ClaimRepository claims;
     private final ClaimValueCipher cipher;
+    private final SchemeRuleVersionRepository mirror;
     private final ObjectMapper mapper = new ObjectMapper();
     private final Path rulesRoot;
 
@@ -44,10 +46,12 @@ public class EligibilityService {
     private final Map<String, List<Map<String, Object>>> ruleCache = new ConcurrentHashMap<>();
 
     public EligibilityService(RuleEngine engine, ClaimRepository claims,
-        ClaimValueCipher cipher, @Value("${app.rules-path:../../packages/rules}") String rulesPath) {
+        ClaimValueCipher cipher, SchemeRuleVersionRepository mirror,
+        @Value("${app.rules-path:../../packages/rules}") String rulesPath) {
         this.engine = engine;
         this.claims = claims;
         this.cipher = cipher;
+        this.mirror = mirror;
         this.rulesRoot = Path.of(rulesPath).toAbsolutePath().normalize();
     }
 
@@ -166,7 +170,11 @@ public class EligibilityService {
         }
     }
 
-    /** Load and cache rules for one academic year. Returns null when absent. */
+    /**
+     * Load and cache rules for one academic year. Disk is primary; the
+     * startup-validated {@code scheme_rule_version} mirror is the fallback when
+     * a file is missing or unreadable. Returns null when neither has the rules.
+     */
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> loadRules(String year, String scheme) {
         String cacheKey = year + "/" + scheme;
@@ -174,26 +182,68 @@ public class EligibilityService {
 
         Path file = rulesRoot.resolve(year).resolve(scheme + ".json").normalize();
         // Defence in depth: the resolved path must stay under the rules root.
-        if (!file.startsWith(rulesRoot) || !Files.isRegularFile(file)) {
-            return null;
-        }
-        try {
-            Map<String, Object> doc = mapper.readValue(
-                Files.readString(file, StandardCharsets.UTF_8), new TypeReference<>() {});
-            Object rules = doc.get("rules");
-            if (!(rules instanceof List<?> list)) return null;
-            List<Map<String, Object>> parsed = new ArrayList<>(list.size());
-            for (Object o : list) {
-                if (o instanceof Map<?, ?> m) {
-                    Map<String, Object> entry = new java.util.LinkedHashMap<>();
-                    m.forEach((k, v) -> entry.put(String.valueOf(k), v));
-                    parsed.add(entry);
+        if (file.startsWith(rulesRoot) && Files.isRegularFile(file)) {
+            try {
+                Map<String, Object> doc = mapper.readValue(
+                    Files.readString(file, StandardCharsets.UTF_8), new TypeReference<>() {});
+                List<Map<String, Object>> parsed = parseRulesDoc(doc);
+                if (parsed != null) {
+                    ruleCache.put(cacheKey, parsed);
+                    return parsed;
                 }
+            } catch (Exception e) {
+                log.error("Could not read rules file {}: {}", file.getFileName(), e.getMessage());
             }
-            ruleCache.put(cacheKey, parsed);
-            return parsed;
-        } catch (Exception e) {
-            log.error("Could not read rules file {}: {}", file.getFileName(), e.getMessage());
+        }
+        List<Map<String, Object>> mirrored = loadMirrorRules(year, scheme);
+        if (mirrored != null) {
+            ruleCache.put(cacheKey, mirrored);
+        }
+        return mirrored;
+    }
+
+    /** Shared shape check for disk documents and mirror rows. */
+    private List<Map<String, Object>> parseRulesDoc(Map<String, Object> doc) {
+        if (doc == null) return null;
+        Object rules = doc.get("rules");
+        if (!(rules instanceof List<?> list)) return null;
+        List<Map<String, Object>> parsed = new ArrayList<>(list.size());
+        for (Object o : list) {
+            if (o instanceof Map<?, ?> m) {
+                Map<String, Object> entry = new java.util.LinkedHashMap<>();
+                m.forEach((k, v) -> entry.put(String.valueOf(k), v));
+                parsed.add(entry);
+            }
+        }
+        return parsed;
+    }
+
+    /**
+     * Fallback reader for the {@code scheme_rule_version} mirror: the validated
+     * copy {@code RuleBootstrapRunner} wrote at startup. This is the table's
+     * request-time reader — disk stays primary, so a mirror row can never shadow
+     * a newer file.
+     */
+    private List<Map<String, Object>> loadMirrorRules(String year, String scheme) {
+        try {
+            return mirror.findBySchemeIgnoreCaseAndAcademicYear(scheme, year)
+                .map(row -> {
+                    try {
+                        Map<String, Object> doc = mapper.readValue(
+                            row.rulesJson, new TypeReference<>() {});
+                        return parseRulesDoc(doc);
+                    } catch (Exception e) {
+                        log.error("Could not parse mirrored rules for scheme={} year={}",
+                            scheme, year, e);
+                        return null;
+                    }
+                })
+                .orElse(null);
+        } catch (RuntimeException e) {
+            // The mirror must never take eligibility down: no DB on this path
+            // (unit tests, degraded deploys) behaves like "no mirror row".
+            log.debug("Mirror lookup failed for scheme={} year={}: {}", scheme, year,
+                e.getMessage());
             return null;
         }
     }

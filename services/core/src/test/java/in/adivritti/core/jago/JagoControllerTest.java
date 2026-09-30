@@ -39,7 +39,8 @@ class JagoControllerTest {
     private static final UUID OTHER = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
     private final JagoToolRouter router = mock(JagoToolRouter.class);
-    private final JagoController controller = new JagoController(router, new ScholarAccessGuard());
+    private final JagoController controller =
+        new JagoController(router, new ScholarAccessGuard(false));
 
     private MockMvc mvc;
 

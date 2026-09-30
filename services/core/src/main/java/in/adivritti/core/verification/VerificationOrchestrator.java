@@ -14,8 +14,10 @@ import in.adivritti.core.verification.strategy.VerificationStrategy;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,10 +66,25 @@ public class VerificationOrchestrator {
      * {@code pending_review} outcome is a transient state that the next attempt
      * should be able to improve on, so caching it for an hour would strand the
      * applicant in a stale verdict.
+     *
+     * <p>The key carries {@code evidenceRef}, not just {@code usid + claimType}: two
+     * submissions for the same claim backed by different documents are different
+     * verifications, and the two-part key served the first document's verdict for the
+     * second (and skipped persisting its claim) for the whole TTL. With evidence in
+     * the key, a cache hit means this exact verification already ran and its claim is
+     * already in the wallet — which is what makes skipping the write on a hit safe.
+     *
+     * <p>The contract's {@code idempotencyKey} is honoured on top of the cache: a key
+     * that already produced a claim for this scholar short-circuits to a replay of
+     * that claim (same claim id, verdict, confidence, validity; empty provenance
+     * trail, because the replay performed no verification). Unlike the cache, the
+     * key survives across different evidence refs. Only successful verifications
+     * deduplicate — a failure persists a fresh deficiency per attempt by design.
      */
     @Cacheable(
         value = "verification",
-        key = "T(String).valueOf(#req.usid()) + ':' + T(String).valueOf(#req.claimType())",
+        key = "T(String).valueOf(#req.usid()) + ':' + T(String).valueOf(#req.claimType())"
+            + " + ':' + T(String).valueOf(#req.evidenceRef())",
         unless = "#result == null || #result.verdict() == 'failed' || #result.verdict() == 'pending_review'")
     @Transactional
     public VerifyResponse verify(VerifyRequest req) {
@@ -75,6 +92,14 @@ public class VerificationOrchestrator {
         if (req.usid() == null) throw new IllegalArgumentException("usid is required");
         if (req.claimType() == null || req.claimType().isBlank()) {
             throw new IllegalArgumentException("claimType is required");
+        }
+        String idempotencyKey = normalizedKey(req.idempotencyKey());
+        if (idempotencyKey != null) {
+            Optional<Claim> prior =
+                claims.findFirstByUsidAndIdempotencyKey(req.usid(), idempotencyKey);
+            if (prior.isPresent()) {
+                return replayResponse(prior.get());
+            }
         }
 
         VerificationAttempt attempt = new VerificationAttempt(req);
@@ -93,7 +118,7 @@ public class VerificationOrchestrator {
 
             if (r.verified()) {
                 ZonedDateTime validUntil = ZonedDateTime.now().plusDays(CLAIM_VALIDITY_DAYS);
-                Claim claim = persistClaim(req, strategy.tier(), r.confidence(), validUntil);
+                Claim claim = persistClaimIdempotent(req, strategy.tier(), r.confidence(), validUntil);
                 String verdict = strategy.tier().equals("gov_verified")
                     ? VERDICT_VERIFIED : strategy.tier();
                 return new VerifyResponse(claim.id, req.usid(), req.claimType(), verdict,
@@ -125,6 +150,11 @@ public class VerificationOrchestrator {
      */
     private Claim persistClaim(VerifyRequest req, String tier, double confidence,
         ZonedDateTime validUntil) {
+        return claims.save(newClaim(req, tier, confidence, validUntil));
+    }
+
+    private Claim newClaim(VerifyRequest req, String tier, double confidence,
+        ZonedDateTime validUntil) {
         Claim c = new Claim();
         c.usid = req.usid();
         c.claimType = req.claimType();
@@ -135,8 +165,42 @@ public class VerificationOrchestrator {
         c.validUntil = validUntil;
         c.evidenceRef = req.evidenceRef();
         c.verifier = "verification-orchestrator";
+        c.idempotencyKey = normalizedKey(req.idempotencyKey());
         c.valueEncrypted = cipher.seal(VALUELESS);
-        return claims.save(c);
+        return c;
+    }
+
+    /**
+     * Wallet write that honours the caller key. A key that already produced a claim
+     * for this scholar returns that row; a unique-violation race resolves to the
+     * winner's row. Either way the wallet holds one claim per key per scholar.
+     */
+    private Claim persistClaimIdempotent(VerifyRequest req, String tier, double confidence,
+        ZonedDateTime validUntil) {
+        String key = normalizedKey(req.idempotencyKey());
+        if (key == null) {
+            return persistClaim(req, tier, confidence, validUntil);
+        }
+        try {
+            return claims.saveAndFlush(newClaim(req, tier, confidence, validUntil));
+        } catch (DataIntegrityViolationException race) {
+            return claims.findFirstByUsidAndIdempotencyKey(req.usid(), key)
+                .orElseThrow(() -> race);
+        }
+    }
+
+    /** Replay: same claim, same verdict — no verification ran, so no trail. */
+    private VerifyResponse replayResponse(Claim existing) {
+        String verdict = "gov_verified".equals(existing.method)
+            ? VERDICT_VERIFIED : existing.method;
+        return new VerifyResponse(existing.id, existing.usid, existing.claimType, verdict,
+            existing.confidence, existing.validUntil, List.of(), null);
+    }
+
+    /** Blank and missing keys are the same: no idempotency requested. */
+    private static String normalizedKey(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        return raw.trim();
     }
 
     private void persistDeficiency(VerifyRequest req, VerifyResponse.DeficiencyDto d) {

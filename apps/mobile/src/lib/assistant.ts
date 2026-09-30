@@ -161,41 +161,50 @@ export function answerLocal(raw: string, uiLang: SupportedLang): AdiAnswer {
   };
 }
 
-const HELP_URL = "http://localhost:8000/jago/help";
-const AI_TOKEN = "dev-only-ai-service-token";
+/**
+ * Optional BFF base URL, configured at build time via
+ * EXPO_PUBLIC_ASSISTANT_BFF_URL. The BFF (the officer-web /api/* routes, or
+ * any deployment of them) holds the AI service token server-side; this app
+ * never ships a token. Unset means the offline mirror below is the only
+ * path — which is also the judge-demo configuration (WIFI OFF).
+ */
+const BFF_BASE = (process.env.EXPO_PUBLIC_ASSISTANT_BFF_URL ?? "")
+  .trim()
+  .replace(/\/+$/, "");
 
-/** Online-first, offline-proof: AI service when reachable, local mirror otherwise. */
+/** Online-first, offline-proof: BFF when configured and reachable, local mirror otherwise. */
 export async function askAdi(raw: string, uiLang: SupportedLang): Promise<AdiAnswer> {
   const text = raw.trim();
   if (!text) {
     return answerLocal("namaste", uiLang);
   }
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2500);
-    const res = await fetch(HELP_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-ai-service-token": AI_TOKEN,
-      },
-      body: JSON.stringify({ question: text.slice(0, 500), lang: uiLang }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    if (res.ok) {
-      const data = await res.json();
-      if (typeof data?.answer === "string") {
-        return {
-          lane: data.lane === "status" ? "status" : "help",
-          text: data.answer,
-          suggestions: Array.isArray(data.suggestions) ? data.suggestions.slice(0, 3) : [],
-          online: true,
-        };
+  if (BFF_BASE.length > 0) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+      const res = await fetch(`${BFF_BASE}/api/jago/help`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ question: text.slice(0, 500), lang: uiLang }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data?.answer === "string") {
+          return {
+            lane: data.lane === "status" ? "status" : "help",
+            text: data.answer,
+            suggestions: Array.isArray(data.suggestions) ? data.suggestions.slice(0, 3) : [],
+            online: true,
+          };
+        }
       }
+    } catch {
+      // Offline (judge demo runs WIFI OFF) — fall through to the mirror.
     }
-  } catch {
-    // Offline (judge demo runs WIFI OFF) — fall through to the mirror.
   }
   return answerLocal(text, uiLang);
 }

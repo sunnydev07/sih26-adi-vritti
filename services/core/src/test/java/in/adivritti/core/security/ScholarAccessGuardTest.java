@@ -23,7 +23,7 @@ class ScholarAccessGuardTest {
     private static final UUID USID = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID OTHER = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
-    private final ScholarAccessGuard guard = new ScholarAccessGuard();
+    private final ScholarAccessGuard guard = new ScholarAccessGuard(false);
 
     private static void runAs(Authentication auth, Runnable body) {
         SecurityContext context = SecurityContextHolder.createEmptyContext();
@@ -106,6 +106,43 @@ class ScholarAccessGuardTest {
         Authentication auth = new UsernamePasswordAuthenticationToken(
             "officer-42", null, List.of(new SimpleGrantedAuthority("ROLE_OFFICER")));
         runAs(auth, () -> assertEquals("officer-42", guard.accessorName()));
+    }
+
+    @Test
+    void officerGateAllowsOfficersAndAdmins() {
+        runAs(jwt(null, "OFFICER"), () -> guard.checkOfficer());
+        runAs(jwt(null, "ADMIN"), () -> guard.checkOfficer());
+    }
+
+    @Test
+    void officerGateRefusesAScholarToken() {
+        // Identity resolution and the exception queue are officer operations.
+        runAs(jwt(USID), () -> {
+            ForbiddenException e = assertThrows(ForbiddenException.class,
+                () -> guard.checkOfficer());
+            assertEquals("OFFICER_ROLE_REQUIRED", e.getErrorCode());
+        });
+    }
+
+    @Test
+    void officerGateRefusesAnonymous() {
+        SecurityContextHolder.clearContext();
+        ForbiddenException e = assertThrows(ForbiddenException.class,
+            () -> guard.checkOfficer());
+        assertEquals("AUTHENTICATION_REQUIRED", e.getErrorCode());
+    }
+
+    @Test
+    void devModeDisablesOwnershipAndRoleChecks() {
+        // docs/specs/demo-path.md is a token-free curl walk-through and there is no
+        // dev-token helper, so allow-insecure-dev has to reach this layer too: otherwise
+        // every guarded endpoint in the demo answers 403. The prod profile sets the flag
+        // false, and the bypass is logged.
+        ScholarAccessGuard devGuard = new ScholarAccessGuard(true);
+        SecurityContextHolder.clearContext();
+
+        devGuard.check(OTHER);
+        devGuard.checkOfficer();
     }
 
     @Test

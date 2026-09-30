@@ -6,8 +6,15 @@ schemes and three portals. Read docs/specs/00-overview.md before any task.
 ## Non-negotiables
 - docs/openapi/core.yaml is the contract. Generate clients; never hand-edit
   packages/api-client.
-- No mock or hardcoded data in apps/ or services/core. All fake government data
-  lives behind services/govsim.
+- No mock data outside the API seam. Demo/fallback data in apps/ lives ONLY in
+  the seam modules (officer-web `src/lib/api.ts`, mobile `src/lib/jago.ts`),
+  typed to the contract shapes; screens and components never import
+  `__mocks__` or hold demo datasets. All fake government data lives behind
+  services/govsim.
+- Demo actions must not claim effects beyond the screen. Buttons that stage,
+  simulate, or clear local state say so in the UI copy ("Demo: … — nothing
+  was sent/recorded"); toasts never claim an audit log, a sent message, or a
+  completed sync the app did not perform.
 - No real PII, ever. Test data comes from data/synthetic with its fixed seed.
 - Never store an Aadhaar number in plaintext. Reference keys only.
 - Factual scholarship status is rendered from templates over tool output.

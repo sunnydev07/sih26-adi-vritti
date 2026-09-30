@@ -74,6 +74,19 @@ public class ConsentService {
         return toDto(consents.save(c));
     }
 
+    /**
+     * The owner of a consent artefact, so a controller can authorise before revoking.
+     * Revocation is a write against somebody's DPDP consent; an id alone must not
+     * authorise it. Same 404 either way, so it cannot be used to probe consent ids.
+     */
+    @Transactional(readOnly = true)
+    public UUID usidOf(UUID id) {
+        if (id == null) throw new NotFoundException("CONSENT_NOT_FOUND", "Consent not found");
+        return consents.findById(id)
+            .map(c -> c.usid)
+            .orElseThrow(() -> new NotFoundException("CONSENT_NOT_FOUND", "Consent not found"));
+    }
+
     @Transactional
     public ConsentDto revoke(UUID id) {
         if (id == null) throw new NotFoundException("CONSENT_NOT_FOUND", "Consent not found");

@@ -2,6 +2,7 @@ package in.adivritti.core.claims.repository;
 
 import in.adivritti.core.claims.entity.Claim;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -31,4 +32,10 @@ public interface ClaimRepository extends JpaRepository<Claim, UUID> {
     List<Object[]> findLiveByUsidWithTypes(@Param("usid") UUID usid);
 
     void deleteByUsid(UUID usid);
+
+    /**
+     * Idempotency lookup: the wallet row a previous verification with this caller
+     * key already produced for this scholar, if any.
+     */
+    Optional<Claim> findFirstByUsidAndIdempotencyKey(UUID usid, String idempotencyKey);
 }

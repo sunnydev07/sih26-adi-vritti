@@ -43,13 +43,14 @@ export const api = {
   async evaluateStpWithJev(item: { scheme: string; stpScore: number; riskScore: number; slaElapsedDays: number; slaLimitDays: number; claims: { status: string }[] }): Promise<JevStpResult> {
     const isClean = item.claims.every((c) => c.status === "gov-verified" || c.status === "corroborated");
     try {
+      // Same-origin BFF proxy (src/app/api/decisions/stp/route.ts) holds the
+      // service token server-side, so the browser bundle never sees it.
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch("http://localhost:8000/decisions/stp", {
+      const res = await fetch("/api/decisions/stp", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-ai-service-token": "dev-only-ai-service-token",
         },
         body: JSON.stringify({
           application: {

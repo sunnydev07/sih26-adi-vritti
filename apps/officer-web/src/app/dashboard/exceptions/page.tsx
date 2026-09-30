@@ -95,7 +95,7 @@ export default function ExceptionsPage() {
       return;
     }
     setRows((prev) => prev.filter((r) => r.stpScore < 85));
-    toast(`⚡ Auto-approved ${eligible.length} applications via JEV 1.13 Straight-Through Processing!`);
+    toast(`Demo: ${eligible.length} applications cleared from this queue — nothing was written back (demo console).`);
   }
 
   return (
@@ -299,7 +299,7 @@ export default function ExceptionsPage() {
                         className="w-full text-center justify-center font-bold py-2 text-xs"
                         onClick={() => {
                           setRows((prev) => prev.filter((item) => item.id !== selected.id));
-                          toast(`⚡ ${selected.id} auto-approved via JEV 1.13! Audit logged.`);
+                          toast(`Demo: ${selected.id} cleared from this queue — no audit record written (demo console).`);
                           setSelected(null);
                         }}
                       >
@@ -318,7 +318,7 @@ export default function ExceptionsPage() {
             <div className="flex flex-wrap gap-2 pb-2">
               <ShimmerButton tone="green" onClick={() => {
                 setRows((prev) => prev.filter((item) => item.id !== selected.id));
-                toast(`${selected.id} approved — STP recorded`);
+                toast(`Demo: ${selected.id} cleared from this queue — nothing recorded (demo console).`);
                 setSelected(null);
               }}>
                 Approve
