@@ -8,7 +8,6 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
-      "expo-camera",
       "expo-asset",
       "expo-font",
       [
@@ -18,14 +17,11 @@
             "kotlinVersion": "1.9.25"
           }
         }
-      ]
+      ],
+      "./plugins/withComposeSuppression.js"
     ],
     "android": {
-      "package": "in.gov.mota.adivritti",
-      "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
-      ]
+      "package": "in.gov.mota.adivritti"
     },
     "web": {
       "bundler": "metro",
