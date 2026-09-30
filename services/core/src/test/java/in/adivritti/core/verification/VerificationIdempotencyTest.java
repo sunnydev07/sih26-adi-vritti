@@ -65,7 +65,7 @@ class VerificationIdempotencyTest {
         strategy = mock(VerificationStrategy.class);
         when(strategy.tier()).thenReturn("gov_verified");
         when(strategy.attempt(any(VerificationAttempt.class))).thenAnswer(invocation -> Optional.of(
-            new TierResult(true, 0.9, "NSP", "deterministic", "note")));
+            new TierResult(true, 0.9, "NSP", "deterministic", "note", null)));
         claims = mock(ClaimRepository.class);
         when(claims.save(any(Claim.class))).thenAnswer(invocation -> {
             Claim c = invocation.getArgument(0);

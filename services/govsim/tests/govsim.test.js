@@ -223,6 +223,38 @@ test('digilocker has a genuine, stable rejection path', async () => {
   assert.strictEqual(again.json.verified, false, 'rejection must be stable across calls');
 });
 
+test('digilocker verify carries deterministic document fields on success', async () => {
+  // Core persists adapter-sourced field values into the claims wallet (never
+  // caller-supplied ones). The fields must be a pure function of the USID,
+  // exactly like the verify decision.
+  const demo = '11111111-1111-4111-8111-111111111111';
+  const first = await get(`/digilocker/verify?usid=${demo}&claim=income`);
+  assert.strictEqual(first.status, 200);
+  assert.strictEqual(first.json.verified, true);
+  assert.deepStrictEqual(first.json.fields,
+    { family_income_annual_paise: 24000000, st_or_pvtg_status: 'ST', class_level: 9 });
+  // ~1 in 8 non-demo USIDs is rejected, so draw until a passing one turns up
+  // (expected on the first draw; capped far above any flake probability).
+  let passingUsid = null;
+  let a = null;
+  for (let i = 0; i < 50 && passingUsid === null; i += 1) {
+    const usid = `field-probe-${i}-0000-4000-8000-000000000000`;
+    const res = await get(`/digilocker/verify?usid=${usid}&claim=income`);
+    assert.strictEqual(res.status, 200);
+    if (res.json.verified === true) {
+      passingUsid = usid;
+      a = res;
+    }
+  }
+  assert.ok(passingUsid, 'no passing USID found for the fields draw');
+  const b = await get(`/digilocker/verify?usid=${passingUsid}&claim=income`);
+  assert.deepStrictEqual(a.json.fields, b.json.fields, 'fields changed for the same USID');
+  assert.strictEqual(typeof a.json.fields.family_income_annual_paise, 'number');
+  assert.ok(['ST', 'PVTG'].includes(a.json.fields.st_or_pvtg_status));
+  assert.ok(Number.isInteger(a.json.fields.class_level)
+    && a.json.fields.class_level >= 9 && a.json.fields.class_level <= 12);
+});
+
 // Kept last: it is the only test that lets requests through the chaos
 // middleware, so it is the only one that advances the 60-second rate-limit
 // window, and that window is shared by the whole process.

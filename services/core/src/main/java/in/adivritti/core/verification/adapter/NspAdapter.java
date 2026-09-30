@@ -15,6 +15,6 @@ public class NspAdapter implements GovAdapter {
     @Override public CheckResult check(VerifyRequest req) {
         var res = govsim.get("/nsp/verify?usid=" + req.usid() + "&claim=" + req.claimType());
         boolean ok = Boolean.TRUE.equals(res.get("verified"));
-        return new CheckResult(ok, ok ? 0.98 : 0.0, "NSP lookup");
+        return new CheckResult(ok, ok ? 0.98 : 0.0, "NSP lookup", null);
     }
 }

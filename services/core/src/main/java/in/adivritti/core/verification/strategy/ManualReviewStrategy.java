@@ -19,6 +19,6 @@ public class ManualReviewStrategy implements VerificationStrategy {
     @Override
     public Optional<TierResult> attempt(VerificationAttempt attempt) {
         return Optional.of(new TierResult(false, 0.0, "officer-queue", "manual-review",
-            "Routed to officer review with pre-filled worksheet"));
+            "Routed to officer review with pre-filled worksheet", null));
     }
 }

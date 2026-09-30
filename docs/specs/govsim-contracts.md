@@ -35,6 +35,12 @@ NOS 50%, UGC-NTA 40%, DigiLocker-proxy 87.5%. The demo student
 (`11111111-1111-4111-8111-111111111111`) always verifies, so the demo path is
 stable while every system keeps a genuine rejection path.
 
+A successful `/digilocker/verify` also carries deterministic document
+`fields` — `{family_income_annual_paise, st_or_pvtg_status, class_level}` —
+pure functions of the USID (demo student: `24000000` / `ST` / `9`). Core
+persists these adapter-sourced values into the claims wallet; the verify
+request itself carries no value, so callers can never invent one.
+
 ## Dirty-data catalogue (deterministic, seed 26238)
 
 - `Sunita Meena` (NSP) = `Sunita K. Mina` (SFMP) = `SUNITA MEENA` (NOS).

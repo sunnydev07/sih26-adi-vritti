@@ -46,7 +46,7 @@ class VerificationAttemptTest {
         public CheckResult check(VerifyRequest req) {
             calls.incrementAndGet();
             if (failure != null) throw failure;
-            return new CheckResult(verified, verified ? 0.9 : 0.0, name + " lookup");
+            return new CheckResult(verified, verified ? 0.9 : 0.0, name + " lookup", null);
         }
     }
 

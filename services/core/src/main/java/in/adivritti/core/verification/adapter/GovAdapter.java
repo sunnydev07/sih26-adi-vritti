@@ -14,5 +14,11 @@ public interface GovAdapter {
     boolean supports(String claimType);
     CheckResult check(VerifyRequest req);
 
-    record CheckResult(boolean verified, double confidence, String note) {}
+    /**
+     * @param value an adapter-sourced field value for the wallet (e.g. a DigiLocker
+     *     document field), or {@code null} when the source carries no value. Only
+     *     adapter-derived values are ever persisted — the contract's
+     *     {@code VerifyRequest} carries no value, so callers cannot invent one.
+     */
+    record CheckResult(boolean verified, double confidence, String note, String value) {}
 }

@@ -87,7 +87,7 @@ public class DocAiStrategy implements VerificationStrategy {
                 return Optional.empty();
             }
             return Optional.of(new TierResult(true, confidence, "doc-ai", "ocr+tamper-check",
-                "Document parsed at " + confidence + " confidence"));
+                "Document parsed at " + confidence + " confidence", null));
         } catch (WebClientResponseException e) {
             // The AI service answered, and said no. That is not the same as "this
             // document is hard to read", so it earns a line in the log: an unset or

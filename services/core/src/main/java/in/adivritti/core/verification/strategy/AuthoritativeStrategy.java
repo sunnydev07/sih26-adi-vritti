@@ -25,6 +25,7 @@ public class AuthoritativeStrategy implements VerificationStrategy {
         return attempt.probe(adapters).stream()
             .filter(GovAdapter.CheckResult::verified)
             .findFirst()
-            .map(r -> new TierResult(true, r.confidence(), "government-api", "api", r.note()));
+            .map(r -> new TierResult(true, r.confidence(), "government-api", "api", r.note(),
+                r.value()));
     }
 }

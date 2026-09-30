@@ -15,6 +15,6 @@ public class SfmpAdapter implements GovAdapter {
     @Override public CheckResult check(VerifyRequest req) {
         var res = govsim.get("/sfmp/verify?usid=" + req.usid() + "&claim=" + req.claimType());
         boolean ok = Boolean.TRUE.equals(res.get("verified"));
-        return new CheckResult(ok, ok ? 0.95 : 0.0, "SFMP fellowship record");
+        return new CheckResult(ok, ok ? 0.95 : 0.0, "SFMP fellowship record", null);
     }
 }

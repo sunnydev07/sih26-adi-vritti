@@ -161,12 +161,28 @@ app.get('/ugc-nta/verify', (req, res) => {
 // Deterministic per USID like the other systems: the demo student always
 // verifies, roughly 1 in 8 other USIDs is rejected with a reason_code, so
 // Core's corroboration tier actually exercises its rejection path.
+// A successful verification also carries deterministic document `fields`:
+// Core persists adapter-sourced values into the claims wallet (never
+// caller-supplied ones), so the eligibility engine can evaluate value rules.
+function digilockerFields(usid) {
+  if (usid === DEMO_STUDENT.usid) {
+    return { family_income_annual_paise: 24000000, st_or_pvtg_status: 'ST', class_level: 9 };
+  }
+  const h = stableHash(`digilocker-fields:${usid}`);
+  return {
+    family_income_annual_paise: 12000000 + (h % 25) * 1000000,
+    st_or_pvtg_status: h % 10 === 0 ? 'PVTG' : 'ST',
+    class_level: 9 + (h % 4),
+  };
+}
 app.get('/digilocker/verify', (req, res) => {
-  const ok = decide(String(req.query.usid || ''), 'digilocker', 0.875);
+  const usid = String(req.query.usid || '');
+  const ok = decide(usid, 'digilocker', 0.875);
   if (ok) {
     res.json(verify(true, { system: 'DigiLocker-proxy',
       note: 'sandbox fallback — swap for live API Setu in TASK 6.1',
-      documents: ['caste_certificate', 'income_certificate', 'domicile'] }));
+      documents: ['caste_certificate', 'income_certificate', 'domicile'],
+      fields: digilockerFields(usid) }));
     return;
   }
   res.json(verify(false, { system: 'DigiLocker-proxy',

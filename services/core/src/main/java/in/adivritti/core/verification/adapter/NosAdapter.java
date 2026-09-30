@@ -15,6 +15,6 @@ public class NosAdapter implements GovAdapter {
     @Override public CheckResult check(VerifyRequest req) {
         var res = govsim.get("/nos/verify?usid=" + req.usid() + "&claim=" + req.claimType());
         boolean ok = Boolean.TRUE.equals(res.get("verified"));
-        return new CheckResult(ok, ok ? 0.95 : 0.0, "NOS selection record");
+        return new CheckResult(ok, ok ? 0.95 : 0.0, "NOS selection record", null);
     }
 }

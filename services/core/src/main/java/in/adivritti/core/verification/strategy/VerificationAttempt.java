@@ -41,7 +41,7 @@ public final class VerificationAttempt {
                     // An unreachable portal is not a verification failure; it means
                     // "unknown", which the next tier may still resolve.
                     return new GovAdapter.CheckResult(false, 0.0,
-                        adapter.name() + " unavailable: " + e.getClass().getSimpleName());
+                        adapter.name() + " unavailable: " + e.getClass().getSimpleName(), null);
                 }
             }));
         }

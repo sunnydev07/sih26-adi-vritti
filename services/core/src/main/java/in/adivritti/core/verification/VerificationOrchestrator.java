@@ -118,7 +118,8 @@ public class VerificationOrchestrator {
 
             if (r.verified()) {
                 ZonedDateTime validUntil = ZonedDateTime.now().plusDays(CLAIM_VALIDITY_DAYS);
-                Claim claim = persistClaimIdempotent(req, strategy.tier(), r.confidence(), validUntil);
+                Claim claim = persistClaimIdempotent(req, strategy.tier(), r.confidence(),
+                    validUntil, r.value());
                 String verdict = strategy.tier().equals("gov_verified")
                     ? VERDICT_VERIFIED : strategy.tier();
                 return new VerifyResponse(claim.id, req.usid(), req.claimType(), verdict,
@@ -143,18 +144,20 @@ public class VerificationOrchestrator {
      * Persist the wallet entry for a successful verification.
      *
      * <p>The contract's {@code VerifyRequest} carries no claim <em>value</em> — only
-     * the type, evidence reference, and idempotency key — so this stores an empty
-     * value. It records that the claim was verified (provenance and validity) without
-     * inventing a number. The eligibility engine deliberately skips valueless claims,
-     * so an unpopulated wallet entry can never satisfy a rule with a fake value.
+     * the type, evidence reference, and idempotency key — so a tier that verifies
+     * without an adapter value still stores an empty value. It records that the
+     * claim was verified (provenance and validity) without inventing a number. The
+     * eligibility engine deliberately skips valueless claims, so an unpopulated
+     * wallet entry can never satisfy a rule with a fake value. Only Tier 1
+     * (authoritative adapters) supplies values, straight from the source system.
      */
     private Claim persistClaim(VerifyRequest req, String tier, double confidence,
-        ZonedDateTime validUntil) {
-        return claims.save(newClaim(req, tier, confidence, validUntil));
+        ZonedDateTime validUntil, String value) {
+        return claims.save(newClaim(req, tier, confidence, validUntil, value));
     }
 
     private Claim newClaim(VerifyRequest req, String tier, double confidence,
-        ZonedDateTime validUntil) {
+        ZonedDateTime validUntil, String value) {
         Claim c = new Claim();
         c.usid = req.usid();
         c.claimType = req.claimType();
@@ -166,7 +169,7 @@ public class VerificationOrchestrator {
         c.evidenceRef = req.evidenceRef();
         c.verifier = "verification-orchestrator";
         c.idempotencyKey = normalizedKey(req.idempotencyKey());
-        c.valueEncrypted = cipher.seal(VALUELESS);
+        c.valueEncrypted = cipher.seal(value == null || value.isBlank() ? VALUELESS : value);
         return c;
     }
 
@@ -176,13 +179,13 @@ public class VerificationOrchestrator {
      * winner's row. Either way the wallet holds one claim per key per scholar.
      */
     private Claim persistClaimIdempotent(VerifyRequest req, String tier, double confidence,
-        ZonedDateTime validUntil) {
+        ZonedDateTime validUntil, String value) {
         String key = normalizedKey(req.idempotencyKey());
         if (key == null) {
-            return persistClaim(req, tier, confidence, validUntil);
+            return persistClaim(req, tier, confidence, validUntil, value);
         }
         try {
-            return claims.saveAndFlush(newClaim(req, tier, confidence, validUntil));
+            return claims.saveAndFlush(newClaim(req, tier, confidence, validUntil, value));
         } catch (DataIntegrityViolationException race) {
             return claims.findFirstByUsidAndIdempotencyKey(req.usid(), key)
                 .orElseThrow(() -> race);

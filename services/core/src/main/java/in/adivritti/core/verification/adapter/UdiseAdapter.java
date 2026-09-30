@@ -15,6 +15,6 @@ public class UdiseAdapter implements GovAdapter {
     @Override public CheckResult check(VerifyRequest req) {
         var res = govsim.get("/udise/verify?usid=" + req.usid() + "&claim=" + req.claimType());
         boolean ok = Boolean.TRUE.equals(res.get("verified"));
-        return new CheckResult(ok, ok ? 0.9 : 0.0, "UDISE+ enrolment record");
+        return new CheckResult(ok, ok ? 0.9 : 0.0, "UDISE+ enrolment record", null);
     }
 }

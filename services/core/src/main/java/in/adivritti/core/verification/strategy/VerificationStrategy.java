@@ -8,7 +8,13 @@ public interface VerificationStrategy {
     String tier();
     Optional<TierResult> attempt(VerificationAttempt attempt);
 
-    record TierResult(boolean verified, double confidence, String source, String method, String note) {}
+    /**
+     * @param value an adapter-sourced field value for the wallet, or {@code null}
+     *     when the tier verifies without a value (corroboration, doc-AI,
+     *     manual review). Only Tier 1 carries adapter values today.
+     */
+    record TierResult(boolean verified, double confidence, String source, String method, String note,
+        String value) {}
 
     /** Convenience for strategies that do not need the request itself. */
     default Optional<TierResult> attempt(VerifyRequest request) {

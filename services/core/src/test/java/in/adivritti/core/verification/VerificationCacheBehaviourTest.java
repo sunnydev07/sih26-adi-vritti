@@ -123,7 +123,7 @@ class VerificationCacheBehaviourTest {
         public Optional<TierResult> attempt(VerificationAttempt attempt) {
             calls.incrementAndGet();
             return Optional.of(new TierResult(verified, verified ? 0.99 : 0.0,
-                "DigiLocker", "api_setu", null));
+                "DigiLocker", "api_setu", null, null));
         }
     }
 

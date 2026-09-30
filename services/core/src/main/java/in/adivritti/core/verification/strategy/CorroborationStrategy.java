@@ -33,7 +33,7 @@ public class CorroborationStrategy implements VerificationStrategy {
         long agreeing = attempt.agreeing(adapters);
         if (agreeing >= REQUIRED_AGREEMENTS) {
             return Optional.of(new TierResult(true, CONFIDENCE, "cross-system", "corroboration",
-                agreeing + " independent systems agree"));
+                agreeing + " independent systems agree", null));
         }
         return Optional.empty();
     }
