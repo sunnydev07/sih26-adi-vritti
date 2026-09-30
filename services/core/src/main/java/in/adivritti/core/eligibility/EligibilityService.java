@@ -13,7 +13,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
@@ -140,7 +139,11 @@ public class EligibilityService {
     }
 
     private SchemeVerdict evaluateScheme(String scheme, String year, Map<String, Object> claims) {
-        String label = scheme.toUpperCase(Locale.ROOT);
+        // The verdict label keeps the scheme key as requested (lowercase, matching
+        // the rules filenames and application.scheme). It was previously uppercased,
+        // so DashboardService keyed its verdict map by "PRE-MATRIC" while looking it
+        // up with "pre-matric" — every scheme rendered eligibility "unknown".
+        String label = scheme;
         try {
             List<Map<String, Object>> rules = loadRules(year, scheme);
             if (rules == null || rules.isEmpty()) {
