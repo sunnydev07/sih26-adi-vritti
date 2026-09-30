@@ -143,7 +143,15 @@ public class EligibilityService {
         String label = scheme.toUpperCase(Locale.ROOT);
         try {
             List<Map<String, Object>> rules = loadRules(year, scheme);
-            if (rules == null) {
+            if (rules == null || rules.isEmpty()) {
+                // Fail closed: previously only a missing rule set was rejected, so an
+                // empty-but-present rule list evaluated zero outcomes and returned
+                // "eligible" for every student. An empty rule set is a system fault,
+                // never a clean record — report it as missing, not eligible.
+                if (rules != null) {
+                    log.error("Empty rule set for scheme={} year={}; failing closed",
+                        scheme, year);
+                }
                 return new SchemeVerdict(label, "missing_items",
                     List.of("Rules are not published for " + year), List.of());
             }
