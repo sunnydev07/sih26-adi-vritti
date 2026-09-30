@@ -6,10 +6,11 @@
   "scripts": {
     "start": "expo start --dev-client",
     "android": "expo run:android",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "sync:tokens": "xcopy ..\\..\\packages\\ui-tokens vendor\\ui-tokens /E /I /Y"
   },
   "dependencies": {
-    "@adi-vritti/ui-tokens": "file:../../packages/ui-tokens",
+    "@adi-vritti/ui-tokens": "file:./vendor/ui-tokens",
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
     "@expo/metro-runtime": "~4.0.1",
     "@expo/vector-icons": "~14.0.4",

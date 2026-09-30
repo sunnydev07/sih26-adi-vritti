@@ -11,7 +11,19 @@
       "expo-font"
     ],
     "android": {
-      "package": "in.gov.mota.adivritti"
+      "package": "in.gov.mota.adivritti",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "decb5f03-15e7-4626-9566-59d4cf8ba605"
+      }
     }
   }
 }
