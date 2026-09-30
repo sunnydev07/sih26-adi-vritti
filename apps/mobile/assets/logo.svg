@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4338CA"/>
+      <stop offset="1" stop-color="#1E1B4B"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+  <circle cx="440" cy="30" r="140" fill="#FFFFFF" opacity="0.06"/>
+  <circle cx="30" cy="510" r="105" fill="#F59E0B" opacity="0.13"/>
+  <!-- mortarboard: white facet + periwinkle facet -->
+  <polygon points="256,178 120,246 256,314" fill="#FFFFFF"/>
+  <polygon points="256,178 392,246 256,314" fill="#C7D2FE"/>
+  <!-- head -->
+  <rect x="198" y="282" width="116" height="64" rx="24" fill="#FFFFFF"/>
+  <!-- tassel -->
+  <line x1="256" y1="246" x2="352" y2="246" stroke="#F59E0B" stroke-width="9"/>
+  <line x1="352" y1="246" x2="352" y2="326" stroke="#F59E0B" stroke-width="9"/>
+  <circle cx="256" cy="246" r="11" fill="#F59E0B"/>
+  <circle cx="352" cy="326" r="15" fill="#F59E0B"/>
+  <!-- horizon -->
+  <rect x="146" y="406" width="220" height="18" rx="9" fill="#F59E0B"/>
+</svg>

@@ -3,6 +3,7 @@
     "name": "Adi-Vritti",
     "slug": "adi-vritti",
     "scheme": "adivritti",
+    "icon": "./assets/icon.png",
     "platforms": ["ios", "android", "web"],
     "plugins": [
       "expo-router",
