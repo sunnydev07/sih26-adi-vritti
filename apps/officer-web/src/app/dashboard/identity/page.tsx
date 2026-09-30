@@ -79,9 +79,12 @@ export default function IdentityPage() {
       </div>
 
       <div className="lg:col-span-3">
+        <p className="mb-2 text-sm text-[var(--muted-foreground)] lg:hidden">
+          Same person or two? Green rows match, red rows differ — then decide below.
+        </p>
         {active ? (
           <GlassCard>
-            <div className="grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
+            <div id="identity-compare" className="grid scroll-mt-24 gap-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
               <div className="rounded-xl border border-[var(--border)] p-3">
                 <h3 className="mb-2 text-sm font-bold">System A Record</h3>
                 <p className="font-mono text-xs text-[var(--muted-foreground)]">{active.systemA}</p>

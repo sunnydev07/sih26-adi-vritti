@@ -1,0 +1,6 @@
+{
+  "name": "@adi-vritti/rules",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Versioned scheme eligibility JSON (packages/rules/<AY>/) + compatibility matrix. Data only, no dependencies. Exists as a package so npm/pnpm workspace installs resolve."
+}

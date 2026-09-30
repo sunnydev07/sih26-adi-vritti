@@ -77,11 +77,11 @@ export default function CoverageGapPage() {
               </span>
             ))}
           </nav>
-          <h2 className="font-display text-base font-bold">{LEVEL_LABEL[level]} · click to drill down</h2>
+          <h2 className="font-display text-base font-bold">{LEVEL_LABEL[level]} · tap to drill down</h2>
           {loading ? (
             <p className="py-8 text-center text-sm text-[var(--muted-foreground)]">Loading regions…</p>
           ) : (
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div id="coverage-regions" className="mt-3 grid scroll-mt-24 gap-3 sm:grid-cols-2">
               {children.map((r, i) => {
                 const pct = coveragePct(r);
                 return (
@@ -139,7 +139,7 @@ export default function CoverageGapPage() {
               <Download size={13} aria-hidden /> CSV
             </button>
           </div>
-          <div className="space-y-2.5">
+          <div id="outreach-list" className="scroll-mt-24 space-y-2.5">
             {outreach.map((o) => (
               <div key={o.id} className="rounded-xl border border-[var(--border)] p-3 text-sm">
                 <p className="flex items-start gap-1.5 font-semibold">

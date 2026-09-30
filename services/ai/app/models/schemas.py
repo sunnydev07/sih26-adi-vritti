@@ -91,6 +91,31 @@ class JagoIntentRequest(BaseModel):
     lang: str = Field(default="hi", max_length=16)
 
 
+class JagoHelpRequest(BaseModel):
+    # General help only: no USID field on purpose. A question about the
+    # caller's own file is deflected (lane="status") with a suggested tool —
+    # personal data must only ever come from JAGO tools + templates.
+    question: str = Field(min_length=1, max_length=500)
+    lang: str = Field(default="hi", max_length=16)
+
+
+class JagoHelpCitation(BaseModel):
+    kind: str
+    id: str
+    title: str
+
+
+class JagoHelpResponse(BaseModel):
+    lane: str
+    answer: str
+    lang: str
+    citations: list[JagoHelpCitation]
+    source: str
+    suggested_tool: str | None = None
+    suggestions: list[str]
+    latency_ms: float
+
+
 class JagoIntentResponse(BaseModel):
     intent: str
     needs_usid: bool

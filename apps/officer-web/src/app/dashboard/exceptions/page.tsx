@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ArrowUpDown, Search } from "lucide-react";
+import { ArrowUpDown, ChevronRight, Search } from "lucide-react";
 import * as React from "react";
 import { ClaimRow, RiskBar, SlaBadge } from "@/components/dashboard/bits";
 import { GlassCard, ShimmerButton } from "@/components/effects/premium";
@@ -10,7 +10,8 @@ import { toast } from "@/components/ui/controls";
 import { Input } from "@/components/ui/primitives";
 import { Sheet } from "@/components/ui/sheet";
 import { api, type JevStpResult } from "@/lib/api";
-import { maskAadhaar } from "@/lib/utils";
+import { plainSla, plainStp } from "@/lib/plain";
+import { cn, maskAadhaar } from "@/lib/utils";
 import type { ExceptionItem } from "@/types";
 
 type SortKey = "studentName" | "scheme" | "stage" | "slaElapsedDays" | "riskScore" | "stpScore";
@@ -118,9 +119,67 @@ export default function ExceptionsPage() {
           ) : null}
           <Badge variant="pending">{filtered.length} in queue</Badge>
         </div>
+        {/* Plain-words sort: two choices, not six columns. Desktop table keeps full sorting. */}
+        <div className="flex w-full gap-2 lg:hidden" role="group" aria-label="Sort queue">
+          {(
+            [
+              { id: "overdue", label: "Most overdue", key: "slaElapsedDays" },
+              { id: "ready", label: "Ready to approve", key: "stpScore" },
+            ] as const
+          ).map((o) => (
+            <button
+              key={o.id}
+              onClick={() => { setSortKey(o.key); setSortDesc(true); setPage(0); }}
+              aria-pressed={sortKey === o.key}
+              className={cn(
+                "min-touch flex-1 rounded-full px-3 text-xs font-semibold",
+                sortKey === o.key ? "bg-[var(--primary)] text-white" : "border border-[var(--border)]"
+              )}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
       </GlassCard>
 
-      <GlassCard className="overflow-x-auto p-2">
+      {/* Mobile cards: one file per card, plain words, tap for detail. */}
+      <ul id="queue-decide" className="space-y-2.5 lg:hidden" aria-label="Exception queue">
+        {pageRows.map((r) => {
+          const sla = plainSla(r.slaElapsedDays, r.slaLimitDays);
+          const stp = plainStp(r.stpScore);
+          return (
+            <li key={r.id}>
+              <button
+                onClick={() => setSelected(r)}
+                className="min-touch w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 text-left"
+                aria-label={`${r.studentName}, ${r.scheme}, ${sla.headline}, ${stp.words}`}
+              >
+                <span className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">{r.studentName}</span>
+                    <span className="font-mono text-xs text-[var(--muted-foreground)]">
+                      {r.scheme} · USID ··{r.usidLast8}
+                    </span>
+                  </span>
+                  <ChevronRight size={18} aria-hidden className="shrink-0 text-[var(--muted-foreground)]" />
+                </span>
+                <span className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                  <SlaBadge elapsed={r.slaElapsedDays} limit={r.slaLimitDays} />
+                  <span className="text-[var(--muted-foreground)]">{sla.detail}</span>
+                </span>
+                <span className="mt-1.5 block text-xs font-semibold text-[#4338CA]">{stp.words} · {r.stpScore}%</span>
+              </button>
+            </li>
+          );
+        })}
+        {pageRows.length === 0 ? (
+          <li className="rounded-2xl border border-[var(--border)] p-8 text-center text-sm text-[var(--muted-foreground)]">
+            No files match this filter.
+          </li>
+        ) : null}
+      </ul>
+
+      <GlassCard className="hidden overflow-x-auto p-2 lg:block">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead>
             <tr className="text-xs uppercase tracking-wider text-[var(--muted-foreground)]">
@@ -166,18 +225,19 @@ export default function ExceptionsPage() {
             ) : null}
           </tbody>
         </table>
-        <div className="flex items-center justify-between px-3 py-2 text-sm">
-          <span className="text-[var(--muted-foreground)]">Page {page + 1} of {pageCount}</span>
-          <div className="flex gap-2">
-            <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="rounded-full border border-[var(--border)] px-3 py-1 disabled:opacity-40">
-              Prev
-            </button>
-            <button onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1} className="rounded-full border border-[var(--border)] px-3 py-1 disabled:opacity-40">
-              Next
-            </button>
-          </div>
-        </div>
       </GlassCard>
+
+      <div className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm">
+        <span className="text-[var(--muted-foreground)]">Page {page + 1} of {pageCount}</span>
+        <div className="flex gap-2">
+          <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="min-touch rounded-full border border-[var(--border)] px-4 disabled:opacity-40">
+            Prev
+          </button>
+          <button onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1} className="min-touch rounded-full border border-[var(--border)] px-4 disabled:opacity-40">
+            Next
+          </button>
+        </div>
+      </div>
 
       <Sheet
         open={selected !== null}
@@ -192,6 +252,10 @@ export default function ExceptionsPage() {
               <SlaBadge elapsed={selected.slaElapsedDays} limit={selected.slaLimitDays} />
               <Badge variant="review">STP {selected.stpScore}%</Badge>
             </div>
+            <p className="text-xs text-[var(--muted-foreground)]">
+              {plainSla(selected.slaElapsedDays, selected.slaLimitDays).detail} ·{" "}
+              {plainStp(selected.stpScore).words}
+            </p>
             <div>
               <h3 className="mb-2 text-sm font-bold uppercase tracking-wider text-[var(--muted-foreground)]">Claim verification</h3>
               <div className="space-y-2">

@@ -3,6 +3,9 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import * as React from "react";
+import { AskAdi } from "@/components/assistant/AskAdi";
+import { BottomNav } from "@/components/dashboard/bottomnav";
+import { DemoTour } from "@/components/demo/DemoTour";
 import { Header } from "@/components/dashboard/header";
 import { Sidebar } from "@/components/dashboard/sidebar";
 
@@ -30,11 +33,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2, ease: "easeInOut" }}
-            className="mx-auto w-full max-w-7xl flex-1 space-y-6 p-4 lg:p-8"
+            className="mx-auto w-full max-w-7xl flex-1 space-y-6 p-4 pb-24 lg:p-8 lg:pb-8"
           >
             {children}
           </motion.main>
         </AnimatePresence>
+        <AskAdi />
+        <BottomNav />
+        <DemoTour />
       </div>
     </div>
   );

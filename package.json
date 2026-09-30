@@ -5,9 +5,5 @@
   "description": "Adi-Vritti — Unified Scholarship App for Tribal Students (SIH 2026 PS 26238)",
   "scripts": {
     "generate": "cd packages/api-client && npm run generate"
-  },
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ]
+  }
 }

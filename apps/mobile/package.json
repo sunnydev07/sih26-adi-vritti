@@ -9,6 +9,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@adi-vritti/ui-tokens": "file:../../packages/ui-tokens",
     "@tanstack/react-query": "^5.62.0",
     "drizzle-orm": "^0.36.0",
     "expo": "~52.0.0",

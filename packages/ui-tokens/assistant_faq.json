@@ -1,0 +1,102 @@
+{
+  "_comment": "Canonical Ask Adi help content (English + Hindi). FRONTEND MIRROR: packages/ui-tokens/assistant_faq.json must be an exact copy for offline use — update both in the same PR. NEVER put personal status, amounts for a specific student, or verdicts here: those come only from JAGO tools + templates.",
+  "system": {
+    "greeting_en": "Namaste! I am Adi. Ask me how this app works, which scholarships exist, or what to do next.",
+    "greeting_hi": "नमस्ते! मैं आदि हूँ। मुझसे पूछें यह app कैसे काम करता है, कौन-सी छात्रवृत्ति है, या आगे क्या करना है।",
+    "deflect_en": "I can't see personal records in help mode — I never guess files, payments, or results. For your own file: open Home for your stage and waiting days, or Money for your exact payment reason.",
+    "deflect_hi": "मैं help mode में व्यक्तिगत record नहीं देख सकता — फ़ाइल, payment या परिणाम का अंदाज़ा कभी नहीं लगाता। अपनी फ़ाइल के लिए: stage और प्रतीक्षा-दिन Home में देखें, सही payment कारण Money में।",
+    "fallback_en": "I can help with how Adi-Vritti works, the 5 schemes, tracking your file, failed payments, documents, and the demo tour. What would you like to know?",
+    "fallback_hi": "मैं आदि-वृत्ति की कार्यप्रणाली, 5 योजनाओं, फ़ाइल tracking, failed payment, दस्तावेज़ों और demo tour में मदद कर सकता हूँ। क्या जानना चाहेंगे?",
+    "lang_switch_hi": "ठीक है, अब से Hindi में जवाब दूँगा। पूछिए — यह app कैसे काम करता है?"
+  },
+  "faqs": [
+    {
+      "id": "what-is",
+      "keywords_en": ["what", "adi", "vritti", "app", "about", "project", "mean"],
+      "keywords_hi": ["kya", "hai", "app", "bare", "pariyojna", "क्या", "है", "ऐप"],
+      "answer_en": "Adi-Vritti means one student, one identity, five schemes. It unifies the 5 tribal scholarships (Pre-Matric, Post-Matric, Top Class, NFST, NOS) from 3 portals into a single application with one Scholar ID.",
+      "answer_hi": "आदि-वृत्ति का अर्थ है — एक छात्र, एक पहचान, पाँच योजनाएँ। यह 3 पोर्टलों की 5 जनजातीय छात्रवृत्तियों को एक ही आवेदन और एक Scholar ID में जोड़ता है।",
+      "suggestions": ["Which scholarships can I get?", "What is my Scholar ID?", "How do I use this app?"]
+    },
+    {
+      "id": "usid",
+      "keywords_en": ["usid", "scholar", "identity", "id", "aadhaar", "link", "records"],
+      "keywords_hi": ["scholar", "pehchan", "aadhaar", "jud", "पहचान"],
+      "answer_en": "Your Scholar ID (USID) links your records across NSP, SFMP and NOS into one person. You never type your full Aadhaar anywhere — the app uses reference keys only.",
+      "answer_hi": "आपका Scholar ID (USID) NSP, SFMP और NOS के रिकॉर्ड को एक व्यक्ति से जोड़ता है। आपको कहीं भी पूरा आधार नंबर नहीं लिखना है।",
+      "suggestions": ["Where is my file?", "Which scholarships can I get?"]
+    },
+    {
+      "id": "schemes",
+      "keywords_en": ["scheme", "which", "eligible", "pre-matric", "post-matric", "top", "nfst", "nos", "yojana"],
+      "keywords_hi": ["yojana", "kaun", "scholarship", "milegi", "योजना"],
+      "answer_en": "The 5 schemes: Pre-Matric (Class 9-10, family income up to Rs 2.5 lakh), Post-Matric (Class 11 and above, up to Rs 2.5 lakh), Top Class (premier institutes like IITs, up to Rs 6 lakh), NFST (PhD with NET-JRF), NOS (study abroad in top-100 universities, age 35 or below, up to Rs 6 lakh). Your personal result depends on your documents — check Home.",
+      "answer_hi": "5 योजनाएँ: Pre-Matric (कक्षा 9-10, आय 2.5 लाख तक), Post-Matric (कक्षा 11 से ऊपर, 2.5 लाख तक), Top Class (IIT जैसे संस्थान, 6 लाख तक), NFST (NET-JRF के साथ PhD), NOS (शीर्ष-100 विदेशी विश्वविद्यालय, आयु 35 तक, 6 लाख तक)। आपका व्यक्तिगत परिणाम दस्तावेज़ों पर निर्भर है — Home में देखें।",
+      "suggestions": ["Where is my file?", "What should I do next?"]
+    },
+    {
+      "id": "track-student",
+      "keywords_en": ["track", "where", "file", "application", "stage", "waiting", "days", "check"],
+      "keywords_hi": ["kahan", "file", "sthiti", "avastha", "dekh"],
+      "answer_en": "Open Home: your application stage and waiting days are at the top. Green On track means within time, amber Needs attention means close to the limit, red Overdue means past the limit — the officer sees the same screen.",
+      "answer_hi": "Home खोलें: आपका चरण और प्रतीक्षा-दिन सबसे ऊपर दिखते हैं। हरा On track समय पर है, पीला Needs attention सीमा के पास है, लाल Overdue सीमा पार है — अधिकारी को भी यही दिखता है।",
+      "suggestions": ["Why did my payment fail?", "What should I do next?"]
+    },
+    {
+      "id": "approve-officer",
+      "keywords_en": ["approve", "officer", "queue", "exception", "review", "stp", "officers"],
+      "keywords_hi": ["adhikari", "approve", "swikrit", "jaanch"],
+      "answer_en": "Officers open the Exception Queue, sorted with the most overdue files first. Files marked Ready to approve (score 85 or above) clear with one tap. A failed check never blocks a student — it becomes a deficiency with a fix route instead.",
+      "answer_hi": "अधिकारी Exception Queue खोलते हैं — सबसे ज़्यादा overdue फ़ाइल सबसे ऊपर। Ready to approve (85+ स्कोर) वाली फ़ाइल एक टैप में पास होती है। असफल जाँच छात्र को रोकती नहीं — वह deficiency बनकर fix route के साथ आती है।",
+      "suggestions": ["What does Overdue mean?", "How do I use this app?"]
+    },
+    {
+      "id": "waiting-meaning",
+      "keywords_en": ["overdue", "sla", "waiting", "time", "limit", "breach", "attention", "track", "mean"],
+      "keywords_hi": ["overdue", "vilamb", "samay", "seema", "matlab"],
+      "answer_en": "Waiting time is counted in days against a limit. On track means inside the limit, Needs attention means one day left, Overdue means past the limit — overdue files jump to the top of the officer's queue automatically.",
+      "answer_hi": "प्रतीक्षा-दिन सीमा के मुकाबले गिने जाते हैं। On track सीमा के अंदर है, Needs attention एक दिन बाकी है, Overdue सीमा पार है — overdue फ़ाइल अधिकारी की queue में अपने आप ऊपर आ जाती है।",
+      "suggestions": ["Where is my file?", "Why did my payment fail?"]
+    },
+    {
+      "id": "payment-failed",
+      "keywords_en": ["payment", "failed", "fail", "bank", "dbt", "pfms", "money", "paise", "account", "ifsc"],
+      "keywords_hi": ["payment", "paisa", "bank", "khaata", "fail", "nahi", "aaya", "भुगतान"],
+      "answer_en": "Common bank-payment reasons: Aadhaar not linked to the bank (visit branch for Aadhaar seeding), dormant account (one transaction reactivates it), bank code changed after merger (update IFSC), name differs between Aadhaar and bank (correct it), or funds not yet released (district office). Your exact reason and fix are shown under Money.",
+      "answer_hi": "आम कारण: आधार बैंक से linked नहीं (branch में seeding कराएँ), खाता dormant (एक लेन-देन से चालू), merger के बाद IFSC बदला (IFSC update करें), आधार-बैंक में नाम अलग (सुधरवाएँ), या funds जारी नहीं (district office)। आपका सही कारण और उपाय Money में दिखता है।",
+      "suggestions": ["Where is my file?", "What should I do next?"]
+    },
+    {
+      "id": "document-expired",
+      "keywords_en": ["document", "expired", "expiring", "digilocker", "refetch", "renew", "certificate", "income"],
+      "keywords_hi": ["dastavej", "praman", "samaapt", "digilocker", "naya"],
+      "answer_en": "Verify once, reuse everywhere: a verified document works for all 5 schemes until expiry. If one expires, tap Refetch from DigiLocker on the Wallet screen — one tap, no re-upload.",
+      "answer_hi": "एक बार verify, हर योजना में चलेगा: सत्यापित दस्तावेज़ expiry तक 5 योजनाओं में काम करता है। Expiry पर Wallet में Refetch from DigiLocker दबाएँ — एक टैप, दोबारा upload नहीं।",
+      "suggestions": ["Which scholarships can I get?", "What should I do next?"]
+    },
+    {
+      "id": "demo-tour",
+      "keywords_en": ["demo", "tour", "judge", "show", "how", "use", "guide", "start"],
+      "keywords_hi": ["demo", "kaise", "chalayen", "dikhao", "upayog", "डेमो"],
+      "answer_en": "Demo in 3 steps. 1: Coverage Gap — see missing students down to the school. 2: Exception Queue — one-tap approve a Ready file. 3: Ask me why a payment is pending — I answer from live records, never guesses.",
+      "answer_hi": "3 चरणों में demo। 1: Coverage Gap — school तक missing छात्र देखें। 2: Exception Queue — Ready फ़ाइल एक टैप में approve करें। 3: मुझसे payment pending पूछें — live record से जवाब, अंदाज़ा नहीं।",
+      "suggestions": ["Where is my file?", "Why did my payment fail?", "Which scholarships can I get?"]
+    },
+    {
+      "id": "languages",
+      "keywords_en": ["language", "hindi", "english", "santali", "gondi", "bhasha", "translate"],
+      "keywords_hi": ["bhasha", "hindi", "santali", "gondi"],
+      "answer_en": "I speak Hindi and English, with Santali and Gondi support. Tap the language pills on top of this chat to switch any time.",
+      "answer_hi": "मैं Hindi और English बोलता हूँ, Santali और Gondi समर्थन सहित। बदलने के लिए chat के ऊपर language pills दबाएँ।",
+      "suggestions": ["How do I use this app?", "What is Adi-Vritti?"]
+    },
+    {
+      "id": "contact",
+      "keywords_en": ["contact", "help", "officer", "phone", "call", "complaint", "grievance", "district", "nodal"],
+      "keywords_hi": ["sampark", "madad", "adhikari", "phone", "shikayat"],
+      "answer_en": "For your own file, visit your District Nodal Officer with your application ID (shown on Home). Never share your full Aadhaar number or any OTP with anyone who calls you.",
+      "answer_hi": "अपनी फ़ाइल के लिए District Nodal Officer से application ID (Home पर दिखता है) के साथ मिलें। फोन पर अपना पूरा आधार या OTP किसी से साझा न करें।",
+      "suggestions": ["Where is my file?", "What should I do next?"]
+    }
+  ]
+}

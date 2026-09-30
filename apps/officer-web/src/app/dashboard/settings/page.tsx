@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import * as React from "react";
 import { GlassCard } from "@/components/effects/premium";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,18 @@ export default function SettingsPage() {
         <p className="text-xs text-[var(--muted-foreground)]">
           Money is stored in integer paise and rendered en-IN. Dates are ISO-8601 with explicit timezone. Aadhaar is never shown in full.
         </p>
+      </GlassCard>
+      <GlassCard className="lg:col-span-2">
+        <h2 className="font-display text-base font-bold">Guided demo tour</h2>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          3 beats in 5 minutes: the coverage gap, one-tap approvals, and a fixed payment — built for judges and new officers.
+        </p>
+        <Link
+          href="/dashboard/coverage-gap?demo=1"
+          className="min-touch mt-3 inline-flex items-center rounded-full bg-[var(--primary)] px-5 text-sm font-semibold text-white"
+        >
+          Start the tour →
+        </Link>
       </GlassCard>
       <GlassCard>
         <h2 className="font-display text-base font-bold">Integration readiness</h2>
