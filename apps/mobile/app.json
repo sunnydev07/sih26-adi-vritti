@@ -3,6 +3,7 @@
     "name": "Adi-Vritti",
     "slug": "adi-vritti",
     "scheme": "adivritti",
+    "platforms": ["ios", "android", "web"],
     "plugins": [
       "expo-router",
       "expo-sqlite",
@@ -16,6 +17,11 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/favicon.png"
     },
     "extra": {
       "router": {

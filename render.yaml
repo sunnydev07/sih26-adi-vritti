@@ -1,0 +1,19 @@
+# Render Blueprint — Adi-Vritti Student Portal (Static Web)
+# Push this repo to GitHub, then connect it to Render as a Static Site.
+services:
+  - type: web
+    name: adi-vritti-student
+    runtime: static
+    buildCommand: cd apps/mobile && npm install && npx expo export --platform web
+    staticPublishPath: apps/mobile/dist
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

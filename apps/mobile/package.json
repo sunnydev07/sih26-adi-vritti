@@ -5,6 +5,9 @@
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start --dev-client",
+    "web": "expo start --web",
+    "build:web": "npx expo export --platform web",
+    "serve": "npx serve dist",
     "android": "expo run:android",
     "lint": "tsc --noEmit",
     "sync:tokens": "xcopy ..\\..\\packages\\ui-tokens vendor\\ui-tokens /E /I /Y"
