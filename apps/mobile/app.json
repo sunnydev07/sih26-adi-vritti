@@ -3,7 +3,14 @@
     "name": "Adi-Vritti",
     "slug": "adi-vritti",
     "scheme": "adivritti",
-    "plugins": ["expo-router", "expo-sqlite", "expo-camera"],
-    "android": { "package": "in.gov.mota.adivritti" }
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-camera",
+      "expo-asset"
+    ],
+    "android": {
+      "package": "in.gov.mota.adivritti"
+    }
   }
 }
