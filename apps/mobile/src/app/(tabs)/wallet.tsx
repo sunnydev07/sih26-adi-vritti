@@ -1,45 +1,135 @@
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { Link } from "expo-router";
-import ChatFab from "@/components/ChatFab";
+import { ScrollView, Text, View } from "react-native";
+import {
+  Card,
+  GhostButton,
+  Pill,
+  PressableScale,
+  PrimaryButton,
+  Rise,
+  ScreenHeader,
+  type IconName,
+} from "@/components/ui";
+import { successTap } from "@/lib/feedback";
+import { claimWords } from "@/lib/plainLanguage";
+import { colors } from "@/lib/theme";
 import { mockClaims } from "@/lib/jago";
+import type { ClaimState } from "@/types";
 
-const STATUS_COLOR: Record<string, string> = { valid: "#10B981", expiring: "#F59E0B", expired: "#F43F5E" };
+const DOC_ICON: Record<string, IconName> = {
+  "ST Certificate": "ribbon",
+  "Income Certificate": "cash",
+  "Bank Account": "card",
+};
+
+const STATUS_ICON: Record<ClaimState, IconName> = {
+  valid: "checkmark-circle",
+  expiring: "time",
+  expired: "alert-circle",
+};
+
+type ConnectState = "idle" | "busy" | "done";
 
 export default function WalletScreen() {
+  const router = useRouter();
   const [claims] = useState(mockClaims);
+  const [connect, setConnect] = useState<ConnectState>("idle");
+
+  function connectLocker() {
+    if (connect !== "idle") return;
+    setConnect("busy");
+    setTimeout(() => {
+      setConnect("done");
+      successTap();
+    }, 1400);
+  }
 
   return (
-    <View style={{ flex: 1 }}>
-    <ScrollView style={{ flex: 1, backgroundColor: "#F8FAFC" }}>
-      <View style={{ padding: 16, paddingTop: 48, paddingBottom: 96 }}>
-        <Text style={{ fontSize: 22, fontWeight: "800", color: "#312E81" }}>Document Wallet</Text>
-        <Text style={{ fontSize: 12, color: "#64748B" }}>Verified once, reused across all 5 schemes</Text>
+    <View style={{ flex: 1, backgroundColor: colors.page }}>
+      <ScreenHeader
+        eyebrow="Verified once · reused in 5 schemes"
+        title="Document Wallet"
+        subtitle={`${claims.filter((c) => c.status === "valid").length} of ${claims.length} documents ready`}
+        icon="wallet"
+      />
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 128 }}>
+        <Rise delay={40}>
+          {connect === "done" ? (
+            <Card style={{ backgroundColor: "#ECFDF5", borderColor: "#A7F3D0", flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Ionicons name="checkmark-circle" size={24} color="#047857" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontWeight: "800", color: "#047857" }}>DigiLocker connected</Text>
+                <Text style={{ fontSize: 12, color: "#047857" }}>Fresh copies will land here automatically</Text>
+              </View>
+            </Card>
+          ) : (
+            <PrimaryButton
+              title={connect === "busy" ? "Connecting…" : "Connect DigiLocker"}
+              icon={connect === "busy" ? "sync" : "cloud-upload"}
+              onPress={connectLocker}
+            />
+          )}
+          <View style={{ marginTop: 10 }}>
+            <GhostButton title="Scan document" icon="scan" onPress={() => router.push("/chat")} />
+          </View>
+        </Rise>
 
-        <Pressable style={{ marginTop: 12, backgroundColor: "#312E81", borderRadius: 999, padding: 12, alignItems: "center" }}>
-          <Text style={{ color: "#fff", fontWeight: "700" }}>Connect DigiLocker (live demo)</Text>
-        </Pressable>
-        <Pressable style={{ marginTop: 8, borderColor: "#312E81", borderWidth: 1, borderRadius: 999, padding: 12, alignItems: "center" }}>
-          <Text style={{ color: "#312E81", fontWeight: "700" }}>Scan Document (on-device OCR)</Text>
-        </Pressable>
+        {claims.map((c, i) => {
+          const words = claimWords(c.status);
+          return (
+            <Rise key={c.id} delay={120 + i * 80}>
+              <PressableScale
+                accessibilityRole="link"
+                accessibilityLabel={`${c.type}: ${words.words}. Open details.`}
+                onPress={() => router.push(`/claim/${c.id}`)}
+                haptic
+                style={{ marginTop: 10 }}
+              >
+                <Card>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                    <View
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: 22,
+                        backgroundColor: "#EEF2FF",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Ionicons name={DOC_ICON[c.type] ?? "document-text"} size={22} color={colors.primaryStrong} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 15, fontWeight: "800", color: colors.ink }}>{c.type}</Text>
+                      <Text style={{ fontSize: 12, color: colors.muted }}>{c.preview}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+                  </View>
+                  <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <Pill tone={words.tone} label={words.words} icon={STATUS_ICON[c.status]} />
+                    <Text style={{ fontSize: 11, color: colors.muted }}>
+                      {c.source} · {c.verifiedAt.slice(0, 10)}
+                    </Text>
+                  </View>
+                </Card>
+              </PressableScale>
+            </Rise>
+          );
+        })}
 
-        {claims.map((c) => (
-          <Link key={c.id} href={`/claim/${c.id}`} asChild>
-            <Pressable style={{ marginTop: 10, padding: 14, borderRadius: 16, backgroundColor: "#fff", borderWidth: 1.5, borderColor: STATUS_COLOR[c.status] ?? "#E2E8F0" }}>
-              <Text style={{ fontWeight: "800" }}>{c.type}</Text>
-              <Text style={{ fontSize: 12 }}>{c.preview}</Text>
-              <Text style={{ fontSize: 11, color: "#64748B" }}>
-                {c.status === "valid" ? "✅ Valid" : c.status === "expiring" ? "⏳ Expiring soon" : "❌ Expired"} · {c.source} · verified {c.verifiedAt.slice(0, 10)}
+        <Rise delay={120 + claims.length * 80}>
+          <Card style={{ marginTop: 12, backgroundColor: "#EEF2FF", borderColor: "#C7D2FE" }}>
+            <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
+              <Ionicons name="shield-checkmark" size={18} color={colors.primaryStrong} />
+              <Text style={{ flex: 1, fontSize: 12, color: colors.primaryStrong }}>
+                Verified once, reused across all 5 schemes until expiry. You never upload the same paper twice.
               </Text>
-              <Text style={{ marginTop: 6, fontSize: 12, fontWeight: "700", color: "#312E81" }}>
-                {c.status !== "valid" ? "Refetch from DigiLocker →" : "Details →"}
-              </Text>
-            </Pressable>
-          </Link>
-        ))}
-      </View>
-    </ScrollView>
-      <ChatFab />
+            </View>
+          </Card>
+        </Rise>
+      </ScrollView>
     </View>
   );
 }

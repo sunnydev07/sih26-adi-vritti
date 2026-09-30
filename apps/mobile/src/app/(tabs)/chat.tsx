@@ -1,7 +1,20 @@
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import Animated, { FadeInUp } from "react-native-reanimated";
+import { PressableScale, TypingDots, shadow } from "@/components/ui";
 import { answerLocal, askAdi } from "@/lib/assistant";
-import { assistantSuggestions, colors } from "@/lib/theme";
+import { assistantSuggestions, colors, radius } from "@/lib/theme";
 import type { ChatMessage, SupportedLang } from "@/types";
 
 const LANGS: { id: SupportedLang; label: string }[] = [
@@ -24,6 +37,7 @@ function statusCard(): ChatMessage["card"] {
 }
 
 export default function ChatScreen() {
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     const g = answerLocal("namaste", "hi");
     return [{ id: "m0", role: "jago", text: g.text, createdAt: new Date().toISOString() }];
@@ -65,97 +79,239 @@ export default function ChatScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#F8FAFC", paddingTop: 48 }}>
-      <Text style={{ paddingHorizontal: 16, fontSize: 20, fontWeight: "800", color: colors.primary }}>
-        Ask Adi
-      </Text>
-      <Text style={{ paddingHorizontal: 16, fontSize: 12, color: "#64748B" }}>
-        Help with the app — files and payments stay template-filled, never guessed
-      </Text>
-      <View style={{ flexDirection: "row", gap: 6, paddingHorizontal: 16, marginTop: 8 }}>
-        {LANGS.map((l) => (
-          <Pressable
-            key={l.id}
-            accessibilityRole="button"
-            accessibilityLabel={`Chat in ${l.label}`}
-            onPress={() => setLang(l.id)}
-            style={{
-              paddingHorizontal: 12,
-              paddingVertical: 6,
-              minHeight: 32,
-              borderRadius: 999,
-              backgroundColor: lang === l.id ? colors.primary : "#E2E8F0",
-            }}
-          >
-            <Text style={{ color: lang === l.id ? "#fff" : colors.primary, fontSize: 12, fontWeight: "700" }}>
-              {l.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-      <ScrollView
-        ref={scrollRef}
-        style={{ flex: 1, padding: 16 }}
-        onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+    <View style={{ flex: 1, backgroundColor: colors.page }}>
+      <LinearGradient
+        colors={[colors.primary, "#1E1B4B"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={{
+          paddingTop: 60,
+          paddingBottom: 16,
+          paddingHorizontal: 20,
+          borderBottomLeftRadius: 28,
+          borderBottomRightRadius: 28,
+        }}
       >
-        {messages.map((m) => (
-          <View
-            key={m.id}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View>
+            <View
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                backgroundColor: "rgba(255,255,255,0.16)",
+                borderWidth: 1.5,
+                borderColor: "rgba(255,255,255,0.35)",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: 20, fontWeight: "800", color: "#fff" }}>A</Text>
+            </View>
+            <View
+              style={{
+                position: "absolute",
+                right: 1,
+                bottom: 1,
+                width: 13,
+                height: 13,
+                borderRadius: 7,
+                backgroundColor: "#10B981",
+                borderWidth: 2,
+                borderColor: "#1E1B4B",
+              }}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 20, fontWeight: "800", color: "#fff" }}>Ask Adi</Text>
+            <Text style={{ fontSize: 12, color: "#C7D2FE" }}>
+              Hindi · English · Santali · Gondi — files stay template-filled, never guessed
+            </Text>
+          </View>
+        </View>
+        <View style={{ flexDirection: "row", gap: 6, marginTop: 12 }}>
+          {LANGS.map((l) => {
+            const active = lang === l.id;
+            return (
+              <PressableScale
+                key={l.id}
+                onPress={() => setLang(l.id)}
+                accessibilityLabel={`Chat in ${l.label}`}
+                style={{
+                  paddingHorizontal: 13,
+                  paddingVertical: 7,
+                  minHeight: 34,
+                  borderRadius: radius.pill,
+                  backgroundColor: active ? "#fff" : "rgba(255,255,255,0.14)",
+                }}
+              >
+                <Text style={{ color: active ? colors.primary : "#E0E7FF", fontSize: 12, fontWeight: "800" }}>
+                  {l.label}
+                </Text>
+              </PressableScale>
+            );
+          })}
+        </View>
+      </LinearGradient>
+
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <ScrollView
+          ref={scrollRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 8 }}
+          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+        >
+          {messages.map((m) =>
+            m.role === "user" ? (
+              <Animated.View
+                key={m.id}
+                entering={FadeInUp.duration(260)}
+                style={{
+                  alignSelf: "flex-end",
+                  borderRadius: 18,
+                  borderBottomRightRadius: 6,
+                  paddingHorizontal: 14,
+                  paddingVertical: 10,
+                  marginBottom: 8,
+                  maxWidth: "85%",
+                  backgroundColor: colors.primaryStrong,
+                }}
+              >
+                <Text style={{ color: "#fff", fontSize: 14 }}>{m.text}</Text>
+              </Animated.View>
+            ) : (
+              <Animated.View
+                key={m.id}
+                entering={FadeInUp.duration(260)}
+                style={{ alignSelf: "flex-start", maxWidth: "88%", marginBottom: 8 }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: "800", color: colors.primarySoft, marginBottom: 3 }}>
+                  ADI
+                </Text>
+                <View
+                  style={[
+                    {
+                      backgroundColor: "#fff",
+                      borderRadius: 18,
+                      borderTopLeftRadius: 6,
+                      paddingHorizontal: 14,
+                      paddingVertical: 10,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                    },
+                    shadow.card,
+                  ]}
+                >
+                  <Text style={{ color: colors.ink, fontSize: 14 }}>{m.text}</Text>
+                  {m.card ? (
+                    <View style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
+                      <Text style={{ fontWeight: "800", fontSize: 12, color: colors.ink }}>{m.card.title}</Text>
+                      {m.card.rows.map((r) => (
+                        <Text key={r.label} style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>
+                          {r.label}: <Text style={{ fontWeight: "700" }}>{r.value}</Text>
+                        </Text>
+                      ))}
+                      <PressableScale
+                        onPress={() => router.push("/")}
+                        style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 2 }}
+                        accessibilityLabel="Open Home tab"
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: "800", color: colors.primaryStrong }}>
+                          See it in the app
+                        </Text>
+                        <Ionicons name="chevron-forward" size={13} color={colors.primaryStrong} />
+                      </PressableScale>
+                    </View>
+                  ) : null}
+                </View>
+              </Animated.View>
+            ),
+          )}
+          {sending ? (
+            <View
+              style={{
+                alignSelf: "flex-start",
+                backgroundColor: "#fff",
+                borderRadius: 18,
+                borderTopLeftRadius: 6,
+                borderWidth: 1,
+                borderColor: colors.border,
+                marginBottom: 8,
+              }}
+            >
+              <TypingDots />
+            </View>
+          ) : null}
+        </ScrollView>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 48 }}>
+          <View style={{ flexDirection: "row", gap: 6, paddingHorizontal: 14, paddingVertical: 6 }}>
+            {chips.map((c) => (
+              <Pressable
+                key={c}
+                onPress={() => void sendText(c)}
+                style={{
+                  paddingHorizontal: 13,
+                  paddingVertical: 8,
+                  borderRadius: radius.pill,
+                  backgroundColor: "#EEF2FF",
+                  borderWidth: 1,
+                  borderColor: "#C7D2FE",
+                }}
+              >
+                <Text style={{ fontSize: 12, color: colors.primaryStrong, fontWeight: "700" }}>{c}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </ScrollView>
+
+        <View
+          style={{
+            flexDirection: "row",
+            gap: 8,
+            paddingHorizontal: 14,
+            paddingTop: 8,
+            paddingBottom: 108,
+            alignItems: "center",
+          }}
+        >
+          <TextInput
+            value={draft}
+            onChangeText={setDraft}
+            onSubmitEditing={send}
+            placeholder="Ask Adi…"
+            returnKeyType="send"
             style={{
-              alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-              backgroundColor: m.role === "user" ? colors.primary : "#fff",
-              borderRadius: 14,
-              padding: 10,
-              marginBottom: 8,
-              maxWidth: "85%",
-              borderWidth: m.role === "jago" ? 1 : 0,
-              borderColor: "#E2E8F0",
+              flex: 1,
+              backgroundColor: "#fff",
+              borderRadius: radius.pill,
+              paddingHorizontal: 16,
+              minHeight: 48,
+              fontSize: 14,
+              borderWidth: 1,
+              borderColor: colors.border,
+            }}
+          />
+          <PressableScale
+            onPress={send}
+            haptic
+            accessibilityLabel="Send question"
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 24,
+              backgroundColor: draft.trim() ? colors.primaryStrong : "#CBD5E1",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            <Text style={{ color: m.role === "user" ? "#fff" : "#0F172A" }}>{m.text}</Text>
-            {m.card ? (
-              <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: "#E2E8F0", paddingTop: 8 }}>
-                <Text style={{ fontWeight: "800", fontSize: 12 }}>{m.card.title}</Text>
-                {m.card.rows.map((r) => (
-                  <Text key={r.label} style={{ fontSize: 12 }}>{r.label}: {r.value}</Text>
-                ))}
-              </View>
-            ) : null}
-          </View>
-        ))}
-        {sending ? <Text style={{ fontSize: 12, color: "#64748B" }}>Adi is typing…</Text> : null}
-      </ScrollView>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 44, paddingHorizontal: 12 }}>
-        <View style={{ flexDirection: "row", gap: 6, paddingVertical: 4 }}>
-          {chips.map((c) => (
-            <Pressable
-              key={c}
-              onPress={() => void sendText(c)}
-              style={{ paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999, backgroundColor: "#EEF2FF", borderWidth: 1, borderColor: "#C7D2FE" }}
-            >
-              <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>{c}</Text>
-            </Pressable>
-          ))}
+            <Ionicons name="send" size={20} color="#fff" />
+          </PressableScale>
         </View>
-      </ScrollView>
-      <View style={{ flexDirection: "row", gap: 8, padding: 12 }}>
-        <TextInput
-          value={draft}
-          onChangeText={setDraft}
-          onSubmitEditing={send}
-          placeholder="Ask Adi…"
-          returnKeyType="send"
-          style={{ flex: 1, backgroundColor: "#fff", borderRadius: 999, paddingHorizontal: 14, minHeight: 44, borderWidth: 1, borderColor: "#E2E8F0" }}
-        />
-        <Pressable
-          onPress={send}
-          accessibilityRole="button"
-          accessibilityLabel="Send question"
-          style={{ backgroundColor: colors.primary, borderRadius: 999, paddingHorizontal: 18, minHeight: 44, justifyContent: "center" }}
-        >
-          <Text style={{ color: "#fff", fontWeight: "700" }}>Send</Text>
-        </Pressable>
-      </View>
+      </KeyboardAvoidingView>
     </View>
   );
 }
