@@ -2,8 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { Text, TextInput, View } from "react-native";
-import { PrimaryButton, Rise } from "@/components/ui";
+import { TextInput, View } from "react-native";
+import { PrimaryButton, Rise, Tx } from "@/components/ui";
 import { colors } from "@/lib/theme";
 
 export default function LoginScreen() {
@@ -57,10 +57,12 @@ export default function LoginScreen() {
         </View>
       </Rise>
       <Rise delay={80}>
-        <Text style={{ marginTop: 16, fontSize: 34, fontWeight: "800", color: "#fff" }}>Adi-Vritti</Text>
-        <Text style={{ marginTop: 4, fontSize: 15, color: "#C7D2FE" }}>
+        <Tx variant="hero" weight="extrabold" color="#fff" style={{ marginTop: 16, fontSize: 34, lineHeight: 40 }}>
+          Adi-Vritti
+        </Tx>
+        <Tx variant="body" weight="medium" color="#C7D2FE" style={{ marginTop: 4 }}>
           One student. One identity. Five schemes.
-        </Text>
+        </Tx>
       </Rise>
 
       <Rise delay={170}>
@@ -72,7 +74,9 @@ export default function LoginScreen() {
             padding: 20,
           }}
         >
-          <Text style={{ fontSize: 13, fontWeight: "800", color: colors.ink }}>Mobile number</Text>
+          <Tx variant="caption" weight="extrabold">
+            Mobile number
+          </Tx>
           <View
             style={{
               marginTop: 8,
@@ -81,11 +85,13 @@ export default function LoginScreen() {
               backgroundColor: "#F1F5F9",
               borderRadius: 16,
               borderWidth: 1.5,
-              borderColor: colors.border,
+              borderColor: phone.length === 10 ? "#10B981" : colors.border,
               paddingHorizontal: 14,
             }}
           >
-            <Text style={{ fontSize: 16, fontWeight: "700", color: colors.ink }}>+91</Text>
+            <Tx variant="body" weight="bold">
+              +91
+            </Tx>
             <View style={{ width: 1, height: 24, backgroundColor: colors.border, marginHorizontal: 10 }} />
             <TextInput
               value={phone}
@@ -93,16 +99,22 @@ export default function LoginScreen() {
               placeholder="98765 43210"
               keyboardType="phone-pad"
               maxLength={10}
-              style={{ flex: 1, fontSize: 17, fontWeight: "600", paddingVertical: 14, color: colors.ink }}
+              style={{
+                flex: 1,
+                fontSize: 17,
+                fontFamily: "PlusJakartaSans_600SemiBold",
+                paddingVertical: 14,
+                color: colors.ink,
+              }}
             />
             {phone.length === 10 ? <Ionicons name="checkmark-circle" size={20} color="#047857" /> : null}
           </View>
           <View style={{ marginTop: 14 }}>
             <PrimaryButton amber title="Send OTP" icon="chatbox" onPress={() => router.replace("/(tabs)")} />
           </View>
-          <Text style={{ marginTop: 12, fontSize: 11, color: colors.muted, textAlign: "center" }}>
+          <Tx variant="tiny" color={colors.muted} style={{ marginTop: 12, textAlign: "center" }}>
             Demo build — any 10-digit number works. OTP arrives on SMS in production.
-          </Text>
+          </Tx>
         </View>
       </Rise>
     </LinearGradient>

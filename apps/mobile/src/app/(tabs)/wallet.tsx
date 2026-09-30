@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import {
   Card,
   GhostButton,
@@ -10,6 +10,7 @@ import {
   PrimaryButton,
   Rise,
   ScreenHeader,
+  Tx,
   type IconName,
 } from "@/components/ui";
 import { successTap } from "@/lib/feedback";
@@ -60,8 +61,12 @@ export default function WalletScreen() {
             <Card style={{ backgroundColor: "#ECFDF5", borderColor: "#A7F3D0", flexDirection: "row", alignItems: "center", gap: 10 }}>
               <Ionicons name="checkmark-circle" size={24} color="#047857" />
               <View style={{ flex: 1 }}>
-                <Text style={{ fontWeight: "800", color: "#047857" }}>DigiLocker connected</Text>
-                <Text style={{ fontSize: 12, color: "#047857" }}>Fresh copies will land here automatically</Text>
+                <Tx variant="body" weight="extrabold" color="#047857">
+                  DigiLocker connected
+                </Tx>
+                <Tx variant="caption" color="#047857">
+                  Fresh copies will land here automatically
+                </Tx>
               </View>
             </Card>
           ) : (
@@ -102,16 +107,20 @@ export default function WalletScreen() {
                       <Ionicons name={DOC_ICON[c.type] ?? "document-text"} size={22} color={colors.primaryStrong} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 15, fontWeight: "800", color: colors.ink }}>{c.type}</Text>
-                      <Text style={{ fontSize: 12, color: colors.muted }}>{c.preview}</Text>
+                      <Tx variant="body" weight="extrabold">
+                        {c.type}
+                      </Tx>
+                      <Tx variant="caption" color={colors.muted}>
+                        {c.preview}
+                      </Tx>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={colors.muted} />
                   </View>
                   <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                     <Pill tone={words.tone} label={words.words} icon={STATUS_ICON[c.status]} />
-                    <Text style={{ fontSize: 11, color: colors.muted }}>
+                    <Tx variant="tiny" color={colors.muted}>
                       {c.source} · {c.verifiedAt.slice(0, 10)}
-                    </Text>
+                    </Tx>
                   </View>
                 </Card>
               </PressableScale>
@@ -123,9 +132,9 @@ export default function WalletScreen() {
           <Card style={{ marginTop: 12, backgroundColor: "#EEF2FF", borderColor: "#C7D2FE" }}>
             <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
               <Ionicons name="shield-checkmark" size={18} color={colors.primaryStrong} />
-              <Text style={{ flex: 1, fontSize: 12, color: colors.primaryStrong }}>
+              <Tx variant="caption" color={colors.primaryStrong} style={{ flex: 1 }}>
                 Verified once, reused across all 5 schemes until expiry. You never upload the same paper twice.
-              </Text>
+              </Tx>
             </View>
           </Card>
         </Rise>

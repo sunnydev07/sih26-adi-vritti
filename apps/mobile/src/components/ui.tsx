@@ -1,19 +1,21 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { MotiView } from "moti";
 import type { ComponentProps, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import {
   Pressable,
   Text,
   View,
+  type DimensionValue,
   type GestureResponderEvent,
   type StyleProp,
+  type TextProps,
   type TextStyle,
   type ViewStyle,
 } from "react-native";
 import Animated, {
   Easing,
-  FadeInDown,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -23,15 +25,67 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { lightTap } from "@/lib/feedback";
+import { formatPaise } from "@/lib/format";
 import { colors, radius, toneColors, type Tone } from "@/lib/theme";
 
 export type IconName = ComponentProps<typeof Ionicons>["name"];
+
+/* ------------------------------- typography -------------------------------- */
+/* Plus Jakarta Sans (loaded in root layout). Never pair fontFamily with
+   fontWeight on Android — pick the weight's family instead. */
+
+export type TxWeight = "regular" | "medium" | "semibold" | "bold" | "extrabold";
+
+export const fonts: Record<TxWeight, string> = {
+  regular: "PlusJakartaSans_400Regular",
+  medium: "PlusJakartaSans_500Medium",
+  semibold: "PlusJakartaSans_600SemiBold",
+  bold: "PlusJakartaSans_700Bold",
+  extrabold: "PlusJakartaSans_800ExtraBold",
+};
+
+export type TxVariant = "hero" | "title" | "section" | "body" | "caption" | "tiny";
+
+const SIZES: Record<TxVariant, { size: number; height: number }> = {
+  hero: { size: 24, height: 30 },
+  title: { size: 19, height: 26 },
+  section: { size: 16, height: 22 },
+  body: { size: 15, height: 22 },
+  caption: { size: 13, height: 18 },
+  tiny: { size: 11, height: 15 },
+};
+
+/** Higher-contrast secondary ink for small text (readability over pure muted). */
+export const ink2 = "#475569";
+
+/** The one text component: variant sets size/line-height, weight sets family. */
+export function Tx({
+  variant = "body",
+  weight = "regular",
+  color = colors.ink,
+  style,
+  children,
+  ...rest
+}: {
+  variant?: TxVariant;
+  weight?: TxWeight;
+  color?: string;
+  style?: StyleProp<TextStyle>;
+  children: ReactNode;
+} & TextProps) {
+  const s = SIZES[variant];
+  return (
+    <Text style={[{ fontFamily: fonts[weight], fontSize: s.size, lineHeight: s.height, color }, style]} {...rest}>
+      {children}
+    </Text>
+  );
+}
 
 /* ---------------------------------- motion --------------------------------- */
 
 const SPRING = { damping: 16, stiffness: 380 } as const;
 
-/** Staggered entrance wrapper — stack several with rising `delay` for a wave. */
+/** Staggered entrance — stack with rising `delay` for the signature wave. */
 export function Rise({
   children,
   delay = 0,
@@ -42,12 +96,14 @@ export function Rise({
   style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <Animated.View
-      entering={FadeInDown.duration(480).delay(delay).springify().damping(17)}
+    <MotiView
+      from={{ opacity: 0, translateY: 18 }}
+      animate={{ opacity: 1, translateY: 0 }}
+      transition={{ type: "spring", damping: 19, stiffness: 240, mass: 0.9, delay }}
       style={style}
     >
       {children}
-    </Animated.View>
+    </MotiView>
   );
 }
 
@@ -89,6 +145,28 @@ export function PressableScale({
     >
       {children}
     </AnimatedPressable>
+  );
+}
+
+/** Pulsing placeholder while content loads — the shimmer-screen pattern. */
+export function Skeleton({
+  w = "100%",
+  h = 16,
+  r = 8,
+  style,
+}: {
+  w?: DimensionValue;
+  h?: number;
+  r?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <MotiView
+      from={{ opacity: 0.4 }}
+      animate={{ opacity: 1 }}
+      transition={{ type: "timing", duration: 750, loop: true }}
+      style={[{ width: w, height: h, borderRadius: r, backgroundColor: "#E2E8F0" }, style]}
+    />
   );
 }
 
@@ -153,24 +231,23 @@ export function Pill({ tone, label, icon }: { tone: Tone; label: string; icon?: 
       }}
     >
       {icon ? <Ionicons name={icon} size={12} color={t.ink} /> : null}
-      <Text style={{ fontSize: 11, fontWeight: "800", color: t.ink }}>{label}</Text>
+      <Tx variant="tiny" weight="extrabold" color={t.ink}>
+        {label}
+      </Tx>
     </View>
   );
 }
 
 export function Eyebrow({ children, color }: { children: ReactNode; color?: string }) {
   return (
-    <Text
-      style={{
-        fontSize: 11,
-        fontWeight: "800",
-        letterSpacing: 1.6,
-        textTransform: "uppercase",
-        color: color ?? colors.muted,
-      }}
+    <Tx
+      variant="tiny"
+      weight="extrabold"
+      color={color ?? colors.muted}
+      style={{ letterSpacing: 1.6, textTransform: "uppercase" }}
     >
       {children}
-    </Text>
+    </Tx>
   );
 }
 
@@ -193,10 +270,14 @@ export function SectionTitle({
         marginBottom: 10,
       }}
     >
-      <Text style={{ fontSize: 16, fontWeight: "800", color: colors.ink }}>{title}</Text>
+      <Tx variant="section" weight="extrabold">
+        {title}
+      </Tx>
       {action ? (
         <Pressable onPress={onAction} hitSlop={8}>
-          <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primaryStrong }}>{action}</Text>
+          <Tx variant="caption" weight="bold" color={colors.primaryStrong}>
+            {action}
+          </Tx>
         </Pressable>
       ) : null}
     </View>
@@ -256,8 +337,12 @@ export function ScreenHeader({
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
         <View style={{ flex: 1, paddingRight: 12 }}>
           <Eyebrow color="#A5B4FC">{eyebrow}</Eyebrow>
-          <Text style={{ marginTop: 4, fontSize: 24, fontWeight: "800", color: "#fff" }}>{title}</Text>
-          <Text style={{ marginTop: 3, fontSize: 13, color: "#C7D2FE" }}>{subtitle}</Text>
+          <Tx variant="hero" weight="extrabold" color="#fff" style={{ marginTop: 4 }}>
+            {title}
+          </Tx>
+          <Tx variant="caption" weight="medium" color="#C7D2FE" style={{ marginTop: 3 }}>
+            {subtitle}
+          </Tx>
         </View>
         <View
           style={{
@@ -274,7 +359,9 @@ export function ScreenHeader({
           {icon ? (
             <Ionicons name={icon} size={26} color="#fff" />
           ) : (
-            <Text style={{ fontSize: 22, fontWeight: "800", color: "#fff" }}>{avatar ?? "•"}</Text>
+            <Tx variant="title" weight="extrabold" color="#fff">
+              {avatar ?? "•"}
+            </Tx>
           )}
         </View>
       </View>
@@ -313,7 +400,9 @@ export function PrimaryButton({
         }}
       >
         {icon ? <Ionicons name={icon} size={18} color={amber ? "#1E1B4B" : "#fff"} /> : null}
-        <Text style={{ color: amber ? "#1E1B4B" : "#fff", fontWeight: "800", fontSize: 15 }}>{title}</Text>
+        <Tx variant="body" weight="extrabold" color={amber ? "#1E1B4B" : "#fff"}>
+          {title}
+        </Tx>
       </LinearGradient>
     </PressableScale>
   );
@@ -346,7 +435,9 @@ export function GhostButton({
         }}
       >
         {icon ? <Ionicons name={icon} size={18} color={colors.primaryStrong} /> : null}
-        <Text style={{ color: colors.primaryStrong, fontWeight: "800", fontSize: 15 }}>{title}</Text>
+        <Tx variant="body" weight="extrabold" color={colors.primaryStrong}>
+          {title}
+        </Tx>
       </View>
     </PressableScale>
   );
@@ -380,6 +471,39 @@ export function AnimatedBar({
     >
       <Animated.View style={[{ height: "100%", borderRadius: 999, backgroundColor: color }, fill]} />
     </View>
+  );
+}
+
+/** Eased number count-up (rAF loop — identical on native and web). */
+export function useCountUp(target: number, duration = 1000, delay = 300): number {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    let raf = 0;
+    let start = 0;
+    const timer = setTimeout(() => {
+      const step = (now: number) => {
+        if (!start) start = now;
+        const k = Math.min(1, (now - start) / duration);
+        setValue(Math.round(target * (1 - Math.pow(1 - k, 3))));
+        if (k < 1) raf = requestAnimationFrame(step);
+      };
+      raf = requestAnimationFrame(step);
+    }, delay);
+    return () => {
+      clearTimeout(timer);
+      cancelAnimationFrame(raf);
+    };
+  }, [target, duration, delay]);
+  return value;
+}
+
+/** Paise amount that ticks up from zero on mount. */
+export function Money({ paise, color, size = 20 }: { paise: number; color: string; size?: number }) {
+  const v = useCountUp(paise);
+  return (
+    <Text style={{ fontFamily: fonts.extrabold, fontSize: size, lineHeight: size + 7, color }}>
+      {formatPaise(v)}
+    </Text>
   );
 }
 
@@ -430,16 +554,14 @@ export function Stepper({
               )}
             </View>
             <View style={{ marginLeft: 10, paddingBottom: last ? 0 : 16, flex: 1 }}>
-              <Text
-                style={{
-                  fontSize: 14,
-                  fontWeight: s.state === "todo" ? "500" : "800",
-                  color: s.state === "todo" ? colors.muted : colors.ink,
-                }}
-              >
+              <Tx variant="body" weight={s.state === "todo" ? "medium" : "bold"} color={s.state === "todo" ? colors.muted : colors.ink}>
                 {s.label}
-              </Text>
-              {s.sub ? <Text style={{ fontSize: 12, color: colors.muted, marginTop: 2 }}>{s.sub}</Text> : null}
+              </Tx>
+              {s.sub ? (
+                <Tx variant="caption" color={colors.muted} style={{ marginTop: 2 }}>
+                  {s.sub}
+                </Tx>
+              ) : null}
             </View>
           </View>
         );
@@ -476,8 +598,4 @@ export function inDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
   return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-}
-
-export function captionStyle(): TextStyle {
-  return { fontSize: 12, color: colors.muted };
 }

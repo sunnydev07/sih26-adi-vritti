@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { ScrollView, Switch, Text, View } from "react-native";
+import { ScrollView, Switch, View } from "react-native";
 import {
   Card,
   Eyebrow,
@@ -10,6 +10,7 @@ import {
   PressableScale,
   Rise,
   ScreenHeader,
+  Tx,
   type IconName,
 } from "@/components/ui";
 import { successTap } from "@/lib/feedback";
@@ -57,8 +58,14 @@ function Row({
         <Ionicons name={icon} size={18} color={colors.primaryStrong} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 14, fontWeight: "700", color: colors.ink }}>{title}</Text>
-        {sub ? <Text style={{ fontSize: 12, color: colors.muted, marginTop: 1 }}>{sub}</Text> : null}
+        <Tx variant="body" weight="bold">
+          {title}
+        </Tx>
+        {sub ? (
+          <Tx variant="caption" color={colors.muted} style={{ marginTop: 1 }}>
+            {sub}
+          </Tx>
+        ) : null}
       </View>
       {right ?? <Ionicons name="chevron-forward" size={17} color={colors.muted} />}
     </PressableScale>
@@ -159,7 +166,9 @@ export default function ProfileScreen() {
             }}
           >
             <Ionicons name="log-out" size={18} color="#BE123C" />
-            <Text style={{ color: "#BE123C", fontWeight: "800", fontSize: 15 }}>Sign out</Text>
+            <Tx variant="body" weight="extrabold" color="#BE123C">
+              Sign out
+            </Tx>
           </PressableScale>
         </Rise>
       </ScrollView>

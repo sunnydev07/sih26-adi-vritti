@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import {
   Card,
   Eyebrow,
@@ -9,6 +9,7 @@ import {
   PressableScale,
   PrimaryButton,
   Rise,
+  Tx,
   inDate,
   type IconName,
 } from "@/components/ui";
@@ -33,7 +34,9 @@ export default function ClaimDetailScreen() {
   if (!claim) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.page, padding: 20, paddingTop: 64 }}>
-        <Text style={{ fontSize: 19, fontWeight: "800", color: colors.ink }}>Document not found</Text>
+        <Tx variant="title" weight="extrabold">
+          Document not found
+        </Tx>
         <View style={{ marginTop: 16 }}>
           <PrimaryButton title="Go back" icon="arrow-back" onPress={() => router.back()} />
         </View>
@@ -59,7 +62,9 @@ export default function ClaimDetailScreen() {
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
             <Ionicons name="arrow-back" size={18} color={colors.primaryStrong} />
-            <Text style={{ color: colors.primaryStrong, fontWeight: "700", fontSize: 15 }}>Back</Text>
+            <Tx variant="body" weight="bold" color={colors.primaryStrong}>
+              Back
+            </Tx>
           </View>
         </PressableScale>
 
@@ -78,8 +83,12 @@ export default function ClaimDetailScreen() {
               <Ionicons name={icon} size={28} color="#fff" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 22, fontWeight: "800", color: colors.ink }}>{claim.type}</Text>
-              <Text style={{ fontSize: 13, color: colors.muted }}>{claim.preview}</Text>
+              <Tx variant="title" weight="extrabold">
+                {claim.type}
+              </Tx>
+              <Tx variant="caption" color={colors.muted}>
+                {claim.preview}
+              </Tx>
             </View>
           </View>
         </Rise>
@@ -87,7 +96,9 @@ export default function ClaimDetailScreen() {
         <Rise delay={110}>
           <Card style={{ marginTop: 14 }}>
             <Pill tone={words.tone} label={words.words} />
-            <Text style={{ marginTop: 10, fontSize: 14, color: "#475569" }}>{words.detail}</Text>
+            <Tx variant="body" color="#475569" style={{ marginTop: 10 }}>
+              {words.detail}
+            </Tx>
             <View style={{ marginTop: 12, gap: 8 }}>
               <MetaRow label="From" value={claim.source} />
               <MetaRow label="Verified" value={inDate(claim.verifiedAt)} />
@@ -102,9 +113,9 @@ export default function ClaimDetailScreen() {
               <Card style={{ marginTop: 12, backgroundColor: "#ECFDF5", borderColor: "#A7F3D0" }}>
                 <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
                   <Ionicons name="checkmark-circle" size={22} color="#047857" />
-                  <Text style={{ flex: 1, fontSize: 13, fontWeight: "600", color: "#047857" }}>
+                  <Tx variant="caption" weight="semibold" color="#047857" style={{ flex: 1 }}>
                     Request sent — your fresh copy will appear here once DigiLocker responds.
-                  </Text>
+                  </Tx>
                 </View>
               </Card>
             ) : (
@@ -116,25 +127,25 @@ export default function ClaimDetailScreen() {
             <Card style={{ marginTop: 12, backgroundColor: "#EEF2FF", borderColor: "#C7D2FE" }}>
               <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
                 <Ionicons name="shield-checkmark" size={18} color={colors.primaryStrong} />
-                <Text style={{ flex: 1, fontSize: 12, color: colors.primaryStrong }}>
+                <Tx variant="caption" color={colors.primaryStrong} style={{ flex: 1 }}>
                   Verified once, reused across all 5 schemes until expiry.
-                </Text>
+                </Tx>
               </View>
             </Card>
           )}
         </Rise>
 
         <Rise delay={260}>
-          <View style={{ marginTop: 14 }}>
+          <View style={{ marginTop: 16 }}>
             <Eyebrow>Still confused?</Eyebrow>
             <PressableScale
               onPress={() => router.push("/chat")}
               style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 4 }}
               accessibilityLabel="Ask Adi about this document"
             >
-              <Text style={{ fontSize: 14, fontWeight: "800", color: colors.primaryStrong }}>
+              <Tx variant="body" weight="extrabold" color={colors.primaryStrong}>
                 Ask Adi about this document
-              </Text>
+              </Tx>
               <Ionicons name="chevron-forward" size={16} color={colors.primaryStrong} />
             </PressableScale>
           </View>
@@ -155,8 +166,12 @@ function MetaRow({ label, value }: { label: string; value: string }) {
         borderTopColor: colors.border,
       }}
     >
-      <Text style={{ fontSize: 13, color: colors.muted }}>{label}</Text>
-      <Text style={{ fontSize: 13, fontWeight: "700", color: colors.ink }}>{value}</Text>
+      <Tx variant="caption" color={colors.muted}>
+        {label}
+      </Tx>
+      <Tx variant="caption" weight="bold">
+        {value}
+      </Tx>
     </View>
   );
 }

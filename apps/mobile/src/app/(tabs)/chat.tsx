@@ -1,18 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
+import { MotiView } from "moti";
 import { useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
-  Text,
   TextInput,
   View,
 } from "react-native";
-import Animated, { FadeInUp } from "react-native-reanimated";
-import { PressableScale, TypingDots, shadow } from "@/components/ui";
+import { PressableScale, Tx, TypingDots, shadow } from "@/components/ui";
 import { answerLocal, askAdi } from "@/lib/assistant";
 import { assistantSuggestions, colors, radius } from "@/lib/theme";
 import type { ChatMessage, SupportedLang } from "@/types";
@@ -106,7 +105,9 @@ export default function ChatScreen() {
                 justifyContent: "center",
               }}
             >
-              <Text style={{ fontSize: 20, fontWeight: "800", color: "#fff" }}>A</Text>
+              <Tx variant="title" weight="extrabold" color="#fff">
+                A
+              </Tx>
             </View>
             <View
               style={{
@@ -123,10 +124,12 @@ export default function ChatScreen() {
             />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 20, fontWeight: "800", color: "#fff" }}>Ask Adi</Text>
-            <Text style={{ fontSize: 12, color: "#C7D2FE" }}>
+            <Tx variant="title" weight="extrabold" color="#fff">
+              Ask Adi
+            </Tx>
+            <Tx variant="tiny" weight="medium" color="#C7D2FE">
               Hindi · English · Santali · Gondi — files stay template-filled, never guessed
-            </Text>
+            </Tx>
           </View>
         </View>
         <View style={{ flexDirection: "row", gap: 6, marginTop: 12 }}>
@@ -145,9 +148,9 @@ export default function ChatScreen() {
                   backgroundColor: active ? "#fff" : "rgba(255,255,255,0.14)",
                 }}
               >
-                <Text style={{ color: active ? colors.primary : "#E0E7FF", fontSize: 12, fontWeight: "800" }}>
+                <Tx variant="tiny" weight="extrabold" color={active ? colors.primary : "#E0E7FF"}>
                   {l.label}
-                </Text>
+                </Tx>
               </PressableScale>
             );
           })}
@@ -166,9 +169,11 @@ export default function ChatScreen() {
         >
           {messages.map((m) =>
             m.role === "user" ? (
-              <Animated.View
+              <MotiView
                 key={m.id}
-                entering={FadeInUp.duration(260)}
+                from={{ opacity: 0, translateY: 10, scale: 0.98 }}
+                animate={{ opacity: 1, translateY: 0, scale: 1 }}
+                transition={{ type: "spring", damping: 20, stiffness: 320 }}
                 style={{
                   alignSelf: "flex-end",
                   borderRadius: 18,
@@ -180,17 +185,21 @@ export default function ChatScreen() {
                   backgroundColor: colors.primaryStrong,
                 }}
               >
-                <Text style={{ color: "#fff", fontSize: 14 }}>{m.text}</Text>
-              </Animated.View>
+                <Tx variant="body" color="#fff">
+                  {m.text}
+                </Tx>
+              </MotiView>
             ) : (
-              <Animated.View
+              <MotiView
                 key={m.id}
-                entering={FadeInUp.duration(260)}
+                from={{ opacity: 0, translateY: 10, scale: 0.98 }}
+                animate={{ opacity: 1, translateY: 0, scale: 1 }}
+                transition={{ type: "spring", damping: 20, stiffness: 320 }}
                 style={{ alignSelf: "flex-start", maxWidth: "88%", marginBottom: 8 }}
               >
-                <Text style={{ fontSize: 11, fontWeight: "800", color: colors.primarySoft, marginBottom: 3 }}>
+                <Tx variant="tiny" weight="extrabold" color={colors.primarySoft} style={{ marginBottom: 3 }}>
                   ADI
-                </Text>
+                </Tx>
                 <View
                   style={[
                     {
@@ -205,29 +214,31 @@ export default function ChatScreen() {
                     shadow.card,
                   ]}
                 >
-                  <Text style={{ color: colors.ink, fontSize: 14 }}>{m.text}</Text>
+                  <Tx variant="body">{m.text}</Tx>
                   {m.card ? (
                     <View style={{ marginTop: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
-                      <Text style={{ fontWeight: "800", fontSize: 12, color: colors.ink }}>{m.card.title}</Text>
+                      <Tx variant="caption" weight="extrabold">
+                        {m.card.title}
+                      </Tx>
                       {m.card.rows.map((r) => (
-                        <Text key={r.label} style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>
-                          {r.label}: <Text style={{ fontWeight: "700" }}>{r.value}</Text>
-                        </Text>
+                        <Tx key={r.label} variant="caption" color="#475569" style={{ marginTop: 2 }}>
+                          {r.label}: <Tx variant="caption" weight="bold">{r.value}</Tx>
+                        </Tx>
                       ))}
                       <PressableScale
                         onPress={() => router.push("/")}
                         style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 2 }}
                         accessibilityLabel="Open Home tab"
                       >
-                        <Text style={{ fontSize: 12, fontWeight: "800", color: colors.primaryStrong }}>
+                        <Tx variant="caption" weight="extrabold" color={colors.primaryStrong}>
                           See it in the app
-                        </Text>
+                        </Tx>
                         <Ionicons name="chevron-forward" size={13} color={colors.primaryStrong} />
                       </PressableScale>
                     </View>
                   ) : null}
                 </View>
-              </Animated.View>
+              </MotiView>
             ),
           )}
           {sending ? (
@@ -262,7 +273,9 @@ export default function ChatScreen() {
                   borderColor: "#C7D2FE",
                 }}
               >
-                <Text style={{ fontSize: 12, color: colors.primaryStrong, fontWeight: "700" }}>{c}</Text>
+                <Tx variant="caption" weight="bold" color={colors.primaryStrong}>
+                  {c}
+                </Tx>
               </Pressable>
             ))}
           </View>
@@ -290,7 +303,8 @@ export default function ChatScreen() {
               borderRadius: radius.pill,
               paddingHorizontal: 16,
               minHeight: 48,
-              fontSize: 14,
+              fontSize: 15,
+              fontFamily: "PlusJakartaSans_400Regular",
               borderWidth: 1,
               borderColor: colors.border,
             }}

@@ -7,7 +7,8 @@
       "expo-router",
       "expo-sqlite",
       "expo-camera",
-      "expo-asset"
+      "expo-asset",
+      "expo-font"
     ],
     "android": {
       "package": "in.gov.mota.adivritti"

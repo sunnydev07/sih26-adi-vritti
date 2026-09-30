@@ -1,19 +1,23 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { RefreshControl, ScrollView, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { RefreshControl, ScrollView, View } from "react-native";
 import {
   AnimatedBar,
   Card,
   Eyebrow,
   GhostButton,
+  Money,
   Pill,
   PressableScale,
   PrimaryButton,
   Rise,
   ScreenHeader,
   SectionTitle,
+  Skeleton,
+  Tx,
   inDate,
+  ink2,
   shadow,
 } from "@/components/ui";
 import { formatPaise, greetingFor } from "@/lib/format";
@@ -26,6 +30,23 @@ function Chevron({ open }: { open: boolean }) {
   return <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={colors.primaryStrong} />;
 }
 
+function HomeSkeleton({ name, greet }: { name: string; greet: string }) {
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.page }}>
+      <ScreenHeader eyebrow="Adi-Vritti · Student" title={`${greet}, ${name}`} subtitle="Syncing…" avatar={name.slice(0, 1)} />
+      <View style={{ padding: 16, gap: 12 }}>
+        <Skeleton h={168} r={radius.card} />
+        <Skeleton h={150} r={radius.card} />
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <Skeleton h={120} r={radius.card} style={{ flex: 1 }} />
+          <Skeleton h={120} r={radius.card} style={{ flex: 1 }} />
+        </View>
+        <Skeleton h={110} r={radius.card} />
+      </View>
+    </View>
+  );
+}
+
 /**
  * Student home answers three questions in order: where is my file,
  * what must I do next, and how much money. Everything else folds away.
@@ -33,11 +54,19 @@ function Chevron({ open }: { open: boolean }) {
 export default function StudentDashboardScreen() {
   const router = useRouter();
   const [d] = useState(mockDashboard);
+  const [ready, setReady] = useState(false);
   const [showSchemes, setShowSchemes] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [syncedAt, setSyncedAt] = useState(d.lastSyncAt);
   const greet = greetingFor(new Date());
+
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 800);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (!ready) return <HomeSkeleton name={d.greetingName} greet={greet} />;
 
   const hero = d.applications[0] ?? null;
   const heroSla = hero ? slaWords(hero.elapsedDays, hero.slaDays) : null;
@@ -80,24 +109,26 @@ export default function StudentDashboardScreen() {
               <Card style={{ borderLeftWidth: 5, borderLeftColor: heroTone.color, paddingTop: 14 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                   <Pill tone="info" label={hero.scheme} icon="school" />
-                  <Text style={{ fontSize: 11, fontFamily: "monospace", color: colors.muted }}>{hero.id}</Text>
+                  <Tx variant="tiny" color={colors.muted} style={{ fontFamily: "monospace" }}>
+                    {hero.id}
+                  </Tx>
                 </View>
-                <Text style={{ marginTop: 10, fontSize: 19, fontWeight: "800", color: colors.ink }}>
+                <Tx variant="title" weight="extrabold" style={{ marginTop: 10 }}>
                   {heroSla.headline}
-                </Text>
-                <Text style={{ marginTop: 3, fontSize: 13, color: "#475569" }}>
+                </Tx>
+                <Tx variant="caption" color={ink2} style={{ marginTop: 3 }}>
                   {hero.stage} · {hero.actor}
-                </Text>
+                </Tx>
                 <View style={{ marginTop: 12 }}>
                   <AnimatedBar progress={hero.elapsedDays / Math.max(1, hero.slaDays)} color={heroTone.color} />
-                  <Text style={{ marginTop: 6, fontSize: 12, color: colors.muted }}>
+                  <Tx variant="caption" color={colors.muted} style={{ marginTop: 6 }}>
                     Day {hero.elapsedDays} of {hero.slaDays} · {heroSla.detail}
-                  </Text>
+                  </Tx>
                 </View>
                 <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 2 }}>
-                  <Text style={{ fontSize: 13, fontWeight: "800", color: colors.primaryStrong }}>
+                  <Tx variant="caption" weight="extrabold" color={colors.primaryStrong}>
                     See full timeline
-                  </Text>
+                  </Tx>
                   <Ionicons name="chevron-forward" size={15} color={colors.primaryStrong} />
                 </View>
               </Card>
@@ -124,9 +155,9 @@ export default function StudentDashboardScreen() {
                 <Ionicons name="alert-circle" size={15} color="#B45309" />
                 <Eyebrow color="#B45309">Do this next</Eyebrow>
               </View>
-              <Text style={{ fontSize: 15, fontWeight: "600", color: colors.ink, marginTop: 6 }}>
+              <Tx variant="body" weight="semibold" style={{ marginTop: 6 }}>
                 {firstAction.title}
-              </Text>
+              </Tx>
               <View style={{ marginTop: 12 }}>
                 <PrimaryButton
                   amber
@@ -141,9 +172,9 @@ export default function StudentDashboardScreen() {
                   style={{ marginTop: 10, alignItems: "center", paddingVertical: 6 }}
                   accessibilityLabel={showActions ? "Hide more actions" : `Show ${restActions.length} more actions`}
                 >
-                  <Text style={{ fontSize: 13, color: colors.primaryStrong, fontWeight: "700" }}>
+                  <Tx variant="caption" weight="bold" color={colors.primaryStrong}>
                     {showActions ? "Hide" : `+${restActions.length} more action${restActions.length === 1 ? "" : "s"}`}
-                  </Text>
+                  </Tx>
                 </PressableScale>
               ) : null}
               {showActions
@@ -163,7 +194,9 @@ export default function StudentDashboardScreen() {
                           justifyContent: "space-between",
                         }}
                       >
-                        <Text style={{ fontSize: 13, fontWeight: "600", color: colors.ink, flex: 1 }}>{a.title}</Text>
+                        <Tx variant="caption" weight="semibold" style={{ flex: 1 }}>
+                          {a.title}
+                        </Tx>
                         <Ionicons name="chevron-forward" size={16} color={colors.primaryStrong} />
                       </PressableScale>
                     </Rise>
@@ -190,11 +223,13 @@ export default function StudentDashboardScreen() {
                 >
                   <Ionicons name="cash" size={18} color="#fff" />
                 </View>
-                <Text style={{ marginTop: 8, fontSize: 12, fontWeight: "700", color: "#047857" }}>Received</Text>
-                <Text style={{ fontSize: 20, fontWeight: "800", color: "#047857" }}>
-                  {formatPaise(d.receivedPaise)}
-                </Text>
-                <Text style={{ fontSize: 11, color: "#047857" }}>Safe in your bank</Text>
+                <Tx variant="caption" weight="bold" color="#047857" style={{ marginTop: 8 }}>
+                  Received
+                </Tx>
+                <Money paise={d.receivedPaise} color="#047857" />
+                <Tx variant="tiny" color="#047857">
+                  Safe in your bank
+                </Tx>
               </Card>
             </View>
             <View style={{ flex: 1 }}>
@@ -211,11 +246,13 @@ export default function StudentDashboardScreen() {
                 >
                   <Ionicons name="time" size={18} color="#fff" />
                 </View>
-                <Text style={{ marginTop: 8, fontSize: 12, fontWeight: "700", color: "#B45309" }}>Pending</Text>
-                <Text style={{ fontSize: 20, fontWeight: "800", color: "#B45309" }}>
-                  {formatPaise(d.pendingPaise)}
-                </Text>
-                <Text style={{ fontSize: 11, color: "#B45309" }}>On the way</Text>
+                <Tx variant="caption" weight="bold" color="#B45309" style={{ marginTop: 8 }}>
+                  Pending
+                </Tx>
+                <Money paise={d.pendingPaise} color="#B45309" />
+                <Tx variant="tiny" color="#B45309">
+                  On the way
+                </Tx>
               </Card>
             </View>
           </View>
@@ -241,18 +278,22 @@ export default function StudentDashboardScreen() {
                       <Ionicons name="school" size={20} color="#fff" />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: "800", color: colors.ink }}>{featured.name}</Text>
-                      <Text style={{ fontSize: 12, color: colors.muted }}>{featured.status}</Text>
+                      <Tx variant="body" weight="extrabold">
+                        {featured.name}
+                      </Tx>
+                      <Tx variant="caption" color={colors.muted}>
+                        {featured.status}
+                      </Tx>
                     </View>
                   </View>
                   <Chevron open={showSchemes} />
                 </View>
-                <Text style={{ marginTop: 8, fontSize: 22, fontWeight: "800", color: colors.primaryStrong }}>
+                <Tx variant="hero" weight="extrabold" color={colors.primaryStrong} style={{ marginTop: 8 }}>
                   {formatPaise(featured.amountPaise)}
-                </Text>
-                <Text style={{ fontSize: 12, color: colors.muted }}>
+                </Tx>
+                <Tx variant="caption" color={colors.muted}>
                   {eligible.length} you can get · tap to see all 5
-                </Text>
+                </Tx>
               </Card>
             </PressableScale>
           ) : null}
@@ -286,19 +327,23 @@ export default function StudentDashboardScreen() {
                         />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontWeight: "800", color: colors.ink }}>{s.name}</Text>
-                        <Text style={{ fontSize: 12, color: "#475569" }}>{s.status}</Text>
+                        <Tx variant="body" weight="extrabold">
+                          {s.name}
+                        </Tx>
+                        <Tx variant="caption" color={ink2}>
+                          {s.status}
+                        </Tx>
                       </View>
                       {s.eligible ? (
-                        <Text style={{ fontWeight: "800", color: colors.primaryStrong }}>
+                        <Tx variant="body" weight="extrabold" color={colors.primaryStrong}>
                           {formatPaise(s.amountPaise)}
-                        </Text>
+                        </Tx>
                       ) : null}
                     </View>
                     {s.reason ? (
-                      <Text style={{ marginTop: 6, fontSize: 11, color: colors.muted }}>
+                      <Tx variant="tiny" color={colors.muted} style={{ marginTop: 6 }}>
                         {s.eligible ? s.reason : `Why not: ${s.reason}`}
-                      </Text>
+                      </Tx>
                     ) : null}
                   </Card>
                 </Rise>
