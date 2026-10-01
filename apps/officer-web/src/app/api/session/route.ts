@@ -15,8 +15,19 @@ import { NextResponse, type NextRequest } from "next/server";
  *
  * Three outcomes, all explicit:
  *   - Core answers 2xx on /v1/auth/officer/login -> set an httpOnly session cookie.
- *   - `OFFICER_CONSOLE_DEMO=1`                  -> set a clearly-marked demo cookie.
- *   - otherwise                                 -> 501, and the UI says so.
+ *   - development (non-production)               -> set a clearly-marked demo cookie.
+ *   - production without Core                     -> 501, and the UI says so.
+ *
+ * Demo is ON by default in development: localhost dev is a trusted loop, the
+ * dev Core profile already permits unauthenticated /v1 access, and requiring
+ * an env var first stranded every new developer at the OTP screen (nothing
+ * sends an SMS — there is no SMS integration). Set OFFICER_CONSOLE_DEMO=0 to
+ * opt out. Production always refuses: a public URL must never mint a cookie
+ * anyone can request.
+ *
+ * GET reports whether demo entry is available, so the login page can offer a
+ * one-click demo button instead of making the user guess an OTP that was
+ * never sent. Revealing the flag is safe: it authorises nothing by itself.
  *
  * The demo cookie is opt-in, is refused in production, and authorises nothing beyond
  * this Next app: the BFF still calls Core with its own server-side credential, and Core
@@ -30,8 +41,13 @@ function coreBase(): string {
 }
 
 function demoEnabled(): boolean {
-  return process.env.OFFICER_CONSOLE_DEMO === "1"
-    && process.env.NODE_ENV !== "production";
+  return process.env.NODE_ENV !== "production"
+    && process.env.OFFICER_CONSOLE_DEMO !== "0";
+}
+
+/** Preflight for the login page: is one-click demo entry available? */
+export async function GET() {
+  return NextResponse.json({ demo: demoEnabled() });
 }
 
 export async function POST(request: NextRequest) {
@@ -98,7 +114,7 @@ export async function POST(request: NextRequest) {
       message:
         "Officer sign-in is not wired in this build: Core exposes no /v1/auth/officer/login.",
       detail:
-        "Set OFFICER_CONSOLE_DEMO=1 to enter the console with demo data, or add the Core login endpoint.",
+        "Run the console in development for demo access, or add the Core login endpoint.",
     },
     { status: 501 },
   );
