@@ -21,6 +21,9 @@ tags:
   - name: consent
   - name: admin
 
+security:
+  - bearerAuth: []
+
 paths:
   /v1/identity/resolve:
     post:
@@ -48,6 +51,10 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '422':
           $ref: '#/components/responses/Unprocessable'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/scholars/{usid}/dashboard:
     get:
@@ -68,6 +75,10 @@ paths:
                 $ref: '#/components/schemas/DashboardResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/verify:
     post:
@@ -94,6 +105,10 @@ paths:
                 $ref: '#/components/schemas/VerifyResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/scholars/{usid}/claims:
     get:
@@ -117,6 +132,10 @@ paths:
                 $ref: '#/components/schemas/ClaimsListResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/eligibility/evaluate:
     post:
@@ -141,6 +160,10 @@ paths:
                 $ref: '#/components/schemas/EligibilityResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/applications/{id}/timeline:
     get:
@@ -166,6 +189,10 @@ paths:
                 $ref: '#/components/schemas/ApplicationTimelineResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/disbursements/{usid}:
     get:
@@ -186,6 +213,10 @@ paths:
                 $ref: '#/components/schemas/DisbursementListResponse'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/jago/tool/{name}:
     post:
@@ -218,6 +249,10 @@ paths:
                 $ref: '#/components/schemas/JagoToolResponse'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/consent:
     post:
@@ -240,6 +275,10 @@ paths:
                 $ref: '#/components/schemas/ConsentArtefact'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/consent/{id}:
     delete:
@@ -262,6 +301,10 @@ paths:
                 $ref: '#/components/schemas/ConsentArtefact'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/scholars/{usid}/audit:
     get:
@@ -282,6 +325,10 @@ paths:
                 $ref: '#/components/schemas/AuditPage'
         '404':
           $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/admin/coverage-gap:
     get:
@@ -315,6 +362,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CoverageGapResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /v1/admin/exceptions:
     get:
@@ -350,8 +401,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExceptionPage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Every /v1 route requires a verified JWT. Scholar-scoped routes additionally
+        require the `usid` claim to match the USID in the path (or body), unless the
+        caller holds ROLE_OFFICER or ROLE_ADMIN. A mismatch returns 403 with
+        error_code SCHOLAR_ACCESS_DENIED — deliberately identical whether or not the
+        record exists, so the API cannot be used to enumerate real USIDs.
+
+        Reads of a scholar's personal data additionally require a live, purpose-bound
+        consent artefact; without one they return 403 CONSENT_REQUIRED and the denied
+        attempt is written to the access audit.
+
   parameters:
     UsidPath:
       name: usid
@@ -396,15 +467,37 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Missing or invalid bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: >
+        Authenticated but not permitted — wrong role, the usid claim does not match
+        the requested scholar, or no live consent exists for the purpose the read
+        needs.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
     ErrorResponse:
       type: object
-      required: [error_code, message]
+      required: [error_code, message, details, at, path]
       properties:
         error_code: { type: string, example: SCHOLAR_NOT_FOUND }
         message: { type: string }
-        details: { type: object, additionalProperties: true }
+        details:
+          type: object
+          additionalProperties: true
+          description: >
+            Always populated, and always contains `status` (the HTTP status code)
+            alongside any field-level validation messages.
+        at: { type: string, format: date-time }
+        path: { type: string, nullable: true }
 
     IdentityResolveRequest:
       type: object
@@ -759,14 +852,22 @@ components:
 
     SchoolGap:
       type: object
-      required: [school, enrolled_students, applicants, gap_count]
+      required: [school, gap_count]
       properties:
         school: { type: string }
         block: { type: string }
         district: { type: string }
         state: { type: string }
-        enrolled_students: { type: integer }
-        applicants: { type: integer }
+        enrolled_students:
+          type: integer
+          description: >
+            Always 0 today. UDISE enrolment lives in govsim, not in Core, and
+            applications carry no school, so Core has no denominator to divide
+            by. Reporting 0 rather than inventing one keeps the field meaningful
+            once the enrolment source is wired.
+        applicants:
+          type: integer
+          description: Always 0 today, for the same reason as enrolled_students.
         gap_count: { type: integer }
         pvtg_gap_count: { type: integer }
 
@@ -784,11 +885,20 @@ components:
 
     ExceptionItem:
       type: object
-      required: [application_id, usid, student_name, scheme, stage, stp_score, breach_risk]
+      required: [application_id, usid, scheme, stage, stp_score, breach_risk]
       properties:
         application_id: { type: string, format: uuid }
         usid: { type: string, format: uuid }
-        student_name: { type: string }
+        student_name:
+          type: string
+          nullable: true
+          description: >
+            Always null today, deliberately. Rendering a student's name in the
+            exception queue is a DPDP personal-data access and must go through a
+            consent-gated, audited lookup, so the queue ships without it rather
+            than smuggling a name into an officer's list unannounced. Not required
+            until that lookup exists — otherwise every response violates this
+            contract.
         scheme: { type: string }
         stage: { type: string }
         # 0..100 percent scale to match the console's >= 85 auto-approve
