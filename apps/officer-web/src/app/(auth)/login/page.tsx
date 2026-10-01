@@ -15,6 +15,9 @@ export default function LoginPage() {
   const [phone, setPhone] = React.useState("");
   const [otp, setOtp] = React.useState("");
   const [typed, setTyped] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [demo, setDemo] = React.useState(false);
 
   React.useEffect(() => {
     let i = 0;
@@ -28,12 +31,44 @@ export default function LoginPage() {
 
   function sendOtp(e: React.FormEvent) {
     e.preventDefault();
-    if (phone.replace(/\D/g, "").length >= 10) setStep("otp");
+    if (phone.replace(/\D/g, "").length >= 10) {
+      setError(null);
+      setStep("otp");
+    }
   }
 
-  function verify(e: React.FormEvent) {
+  /**
+   * Exchange the credentials for a session at the server.
+   *
+   * This used to `router.push("/dashboard")` off a length check alone, which granted
+   * nothing: the console had no route guard, so the "sign-in" only animated. A failure
+   * here is shown to the user rather than swallowed, because the honest states are
+   * "Core has no login endpoint" (501) and "those credentials are wrong" (401).
+   */
+  async function verify(e: React.FormEvent) {
     e.preventDefault();
-    if (otp.trim().length >= 4) router.push("/dashboard");
+    if (otp.trim().length < 4) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, otp: otp.trim() }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { message?: string } | null;
+        setError(body?.message ?? `Sign-in failed (${res.status}).`);
+        return;
+      }
+      const body = (await res.json().catch(() => null)) as { demo?: boolean } | null;
+      setDemo(body?.demo === true);
+      router.push("/dashboard");
+    } catch {
+      setError("Sign-in failed. Check the OTP and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -79,17 +114,28 @@ export default function LoginPage() {
                 className="border-white/25 text-center font-mono text-lg tracking-[0.4em] text-white placeholder:text-indigo-100/50"
                 required
               />
-              <Button type="submit" className="shimmer w-full bg-emerald-500 text-white hover:bg-emerald-400">
-                Verify & Enter Dashboard
+              <Button type="submit" disabled={busy} className="w-full bg-emerald-500 text-white hover:bg-emerald-400">
+                {busy ? "Verifying…" : "Verify & Enter Dashboard"}
               </Button>
               <button type="button" onClick={() => setStep("phone")} className="w-full text-center text-xs text-indigo-100/80 hover:underline">
                 Change number
               </button>
             </form>
           )}
+          {error && (
+            <p role="alert" className="mt-3 rounded-md border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs text-amber-100">
+              {error}
+            </p>
+          )}
           <p className="mt-5 text-center text-[11px] text-indigo-100/60">
-            Demo build — any 10-digit number and 4+ digit OTP will enter. No real PII is collected.
+            Sign-in is checked server-side. With no Core login endpoint configured, set
+            OFFICER_CONSOLE_DEMO=1 to enter with demo data. No real PII is collected.
           </p>
+          {demo && (
+            <p className="mt-2 text-center text-[11px] text-amber-200/90">
+              Demo session — console figures are synthetic.
+            </p>
+          )}
         </GlassCard>
       </motion.div>
     </div>
