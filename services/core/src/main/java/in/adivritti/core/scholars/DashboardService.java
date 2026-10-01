@@ -4,6 +4,7 @@ import in.adivritti.core.application.SlaCalculator;
 import in.adivritti.core.application.entity.Application;
 import in.adivritti.core.application.repository.ApplicationRepository;
 import in.adivritti.core.common.exception.NotFoundException;
+import in.adivritti.core.consent.ConsentGate;
 import in.adivritti.core.disbursement.entity.Disbursement;
 import in.adivritti.core.disbursement.repository.DisbursementRepository;
 import in.adivritti.core.eligibility.EligibilityService;
@@ -31,21 +32,24 @@ public class DashboardService {
     private final DeficiencyRepository deficiencies;
     private final EligibilityService eligibility;
     private final SlaCalculator sla;
+    private final ConsentGate consent;
 
     public DashboardService(ApplicationRepository applications,
         DisbursementRepository disbursements, DeficiencyRepository deficiencies,
-        EligibilityService eligibility, SlaCalculator sla) {
+        EligibilityService eligibility, SlaCalculator sla, ConsentGate consent) {
         this.applications = applications;
         this.disbursements = disbursements;
         this.deficiencies = deficiencies;
         this.eligibility = eligibility;
         this.sla = sla;
+        this.consent = consent;
     }
 
     /** Aggregates schemes + SLA + money + pending actions for one USID. */
     @Transactional(readOnly = true)
     public DashboardResponse dashboard(UUID usid) {
         if (usid == null) throw new NotFoundException("SCHOLAR_NOT_FOUND", "Scholar not found");
+        consent.requireConsent(usid, "application_submission", "dashboard");
 
         List<Application> apps = applications.findByUsidOrderByCreatedAtDesc(usid);
         List<Disbursement> pays = disbursements.findByUsidOrderByScheme(usid);

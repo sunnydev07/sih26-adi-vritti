@@ -5,6 +5,7 @@ import in.adivritti.core.claims.dto.ClaimDtos.ClaimsListResponse;
 import in.adivritti.core.claims.entity.Claim;
 import in.adivritti.core.claims.repository.ClaimRepository;
 import in.adivritti.core.common.exception.NotFoundException;
+import in.adivritti.core.consent.ConsentGate;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -14,15 +15,18 @@ import org.springframework.transaction.annotation.Transactional;
 public class ClaimsService {
 
     private final ClaimRepository claims;
+    private final ConsentGate consent;
 
-    public ClaimsService(ClaimRepository claims) {
+    public ClaimsService(ClaimRepository claims, ConsentGate consent) {
         this.claims = claims;
+        this.consent = consent;
     }
 
     /** Wallet read: verified claims reusable across all 5 schemes until expiry. */
     @Transactional(readOnly = true)
     public ClaimsListResponse list(UUID usid, boolean includeExpired) {
         if (usid == null) throw new NotFoundException("SCHOLAR_NOT_FOUND", "Scholar not found");
+        consent.requireConsent(usid, "claim_verification", "claims");
         List<Claim> rows = includeExpired
             ? claims.findByUsidOrderByVerifiedAtDesc(usid)
             : claims.findLiveByUsid(usid);

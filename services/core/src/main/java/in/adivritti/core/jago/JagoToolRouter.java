@@ -2,6 +2,7 @@ package in.adivritti.core.jago;
 
 import in.adivritti.core.application.repository.ApplicationRepository;
 import in.adivritti.core.common.exception.NotFoundException;
+import in.adivritti.core.consent.ConsentGate;
 import in.adivritti.core.disbursement.repository.DisbursementRepository;
 import in.adivritti.core.eligibility.EligibilityService;
 import in.adivritti.core.eligibility.dto.EligibilityDtos.EligibilityRequest;
@@ -30,18 +31,34 @@ public class JagoToolRouter {
         "explain_deficiency", "why_is_payment_pending", "next_action",
         "list_required_documents", "get_disbursement_history");
 
+    /**
+     * Purpose each tool reads under. The chatbot is just another reader of
+     * personal data: it passes the same consent gate as the endpoints, so a
+     * revoked grant blocks the assistant as well as the dashboard.
+     */
+    static final Map<String, String> PURPOSE_FOR_TOOL = Map.of(
+        "get_my_applications", "application_submission",
+        "check_eligibility", "claim_verification",
+        "explain_deficiency", "application_submission",
+        "why_is_payment_pending", "disbursement_tracking",
+        "next_action", "application_submission",
+        "list_required_documents", "application_submission",
+        "get_disbursement_history", "disbursement_tracking");
+
     private final ApplicationRepository applications;
     private final DisbursementRepository disbursements;
     private final DeficiencyRepository deficiencies;
     private final EligibilityService eligibility;
+    private final ConsentGate consent;
 
     public JagoToolRouter(ApplicationRepository applications,
         DisbursementRepository disbursements, DeficiencyRepository deficiencies,
-        EligibilityService eligibility) {
+        EligibilityService eligibility, ConsentGate consent) {
         this.applications = applications;
         this.disbursements = disbursements;
         this.deficiencies = deficiencies;
         this.eligibility = eligibility;
+        this.consent = consent;
     }
 
     public record ToolResult(String tool, UUID usid, Map<String, Object> output, String templateId) {}
@@ -52,6 +69,7 @@ public class JagoToolRouter {
             throw new IllegalArgumentException("Unknown JAGO tool: " + name);
         }
         if (usid == null) throw new IllegalArgumentException("usid is required");
+        consent.requireConsent(usid, PURPOSE_FOR_TOOL.get(name), "jago:" + name);
         Map<String, Object> params = parameters == null ? Map.of() : parameters;
         Map<String, Object> output = switch (name) {
             case "get_my_applications" -> Map.of("applications", applications(usid));

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import in.adivritti.core.application.SlaCalculator;
 import in.adivritti.core.application.entity.Application;
 import in.adivritti.core.application.repository.ApplicationRepository;
+import in.adivritti.core.consent.ConsentGate;
 import in.adivritti.core.disbursement.repository.DisbursementRepository;
 import in.adivritti.core.eligibility.EligibilityService;
 import in.adivritti.core.eligibility.dto.EligibilityDtos.EligibilityRequest;
@@ -53,7 +54,7 @@ class DashboardEligibilityLookupTest {
                 List.of(new SchemeVerdict("pre-matric", "eligible", List.of(), List.of()))));
 
         DashboardService service = new DashboardService(applications, disbursements,
-            deficiencies, eligibility, new SlaCalculator());
+            deficiencies, eligibility, new SlaCalculator(), mock(ConsentGate.class));
         DashboardResponse response = service.dashboard(usid);
 
         assertThat(response.schemes()).hasSize(1);

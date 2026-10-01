@@ -1,6 +1,7 @@
 package in.adivritti.core.disbursement;
 
 import in.adivritti.core.common.exception.NotFoundException;
+import in.adivritti.core.consent.ConsentGate;
 import in.adivritti.core.disbursement.dto.DisbursementDtos.DisbursementDto;
 import in.adivritti.core.disbursement.dto.DisbursementDtos.DisbursementListResponse;
 import in.adivritti.core.disbursement.entity.Disbursement;
@@ -15,10 +16,13 @@ public class DisbursementService {
 
     private final FailureDecoder decoder;
     private final DisbursementRepository disbursements;
+    private final ConsentGate consent;
 
-    public DisbursementService(FailureDecoder decoder, DisbursementRepository disbursements) {
+    public DisbursementService(FailureDecoder decoder, DisbursementRepository disbursements,
+        ConsentGate consent) {
         this.decoder = decoder;
         this.disbursements = disbursements;
+        this.consent = consent;
     }
 
     /** Every failed row is decoded into a plain-language cause + concrete fix. */
@@ -27,6 +31,7 @@ public class DisbursementService {
         if (usid == null) {
             throw new NotFoundException("SCHOLAR_NOT_FOUND", "Scholar not found: null");
         }
+        consent.requireConsent(usid, "disbursement_tracking", "disbursements");
         List<DisbursementDto> items = disbursements.findByUsidOrderByScheme(usid).stream()
             .map(this::toDto).toList();
         return new DisbursementListResponse(usid, items);

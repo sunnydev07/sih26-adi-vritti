@@ -325,6 +325,26 @@ def main() -> int:
                 "ON CONFLICT (usid) DO NOTHING;\n"
             )
 
+        # DPDP consent artefacts: Core denies personal-data reads (claims,
+        # dashboard, disbursements, JAGO tools) without a live purpose-bound
+        # grant, so every seeded scholar carries the three read-path purposes,
+        # granted by the scholar. Consent ids are uuid5 over (usid, purpose):
+        # deterministic across regenerations, so re-applying the file hits the
+        # PK and ON CONFLICT skips instead of duplicating rows. Seeded scholars
+        # take the adult gate path (seed demographics carry no dob); the minor
+        # / guardian-consent path is covered by Core unit tests.
+        for s in seed_rows:
+            usid = seed_usid[s["student_id"]]
+            granted_by = s["full_name"].replace("'", "''")
+            for purpose in ("application_submission", "claim_verification",
+                            "disbursement_tracking"):
+                cid = uuid.uuid5(SEED_NAMESPACE, f"consent-{usid}-{purpose}")
+                f.write(
+                    "INSERT INTO consent_artefact (id, usid, purpose, scope, granted_by) VALUES "
+                    f"('{cid}', '{usid}', '{purpose}', '[]'::jsonb, '{granted_by}') "
+                    "ON CONFLICT (id) DO NOTHING;\n"
+                )
+
         # Identity links: NSP for every seeded scholar, SFMP for most.
         for s in seed_rows:
             usid = seed_usid[s["student_id"]]
