@@ -19,6 +19,7 @@ import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -211,6 +212,32 @@ public class EligibilityService {
             ruleCache.put(cacheKey, mirrored);
         }
         return mirrored;
+    }
+
+    /**
+     * Drop cached rule files so an edit to {@code packages/rules} is picked up without
+     * a restart.
+     *
+     * <p>The container mount is read-only, so there is no inotify signal available and a
+     * periodic clear is the only invalidation mechanism. The tick runs every 10 minutes
+     * by default and no-ops unless something is cached, so the default costs nothing;
+     * {@code infra/docker-compose.override.yml} lowers it to 2s so a rules edit shows up
+     * in a running dev container. Production keeps the default, because a rule file is a
+     * deploy-time artefact there, not something edited under a running pod.
+     *
+     * <p>The mirror fallback is NOT refreshed here — {@code scheme_rule_version} is
+     * written once at startup by {@code RuleBootstrapRunner}, so a disk edit is picked
+     * up but its mirror copy stays stale until the next boot. That is intentional:
+     * re-validating and re-mirroring on every tick would let a malformed edit land in
+     * the database, which is what startup validation exists to prevent.
+     */
+    @Scheduled(fixedDelayString = "${app.rules-watch-interval-ms:600000}")
+    public void invalidateRuleCache() {
+        if (ruleCache.isEmpty()) return;
+        int dropped = ruleCache.size();
+        ruleCache.clear();
+        log.info("Rules cache invalidated ({} entries); the next evaluation re-reads from "
+            + "packages/rules.", dropped);
     }
 
     /** Shared shape check for disk documents and mirror rows. */

@@ -22,7 +22,7 @@ analysis.
 | 6 | **DBT Failure Doctor** | Decodes PFMS/NPCI rejection codes (`E001`–`E006`) into plain-language fixes |
 | 7 | **JAGO+ Scholarship Skill** | Tool-calling for the JAGO chatbot. Status answers are template-filled from tool output — the LLM never free-generates a status, amount, or verdict |
 | 8 | **Coverage Gap Engine** | Privacy-preserving cross-ministry join via HMAC-hashed keys under a shared rotating salt. No raw PII crosses ministries |
-| 9 | **DPDP Consent** | Guardian-linked family accounts (Pre-Matric = minors), purpose-bound consent artefacts, append-only access audit |
+| 9 | **DPDP Consent** | Guardian-linked family accounts (Pre-Matric = minors), purpose-bound consent artefacts, append-only access audit — enforced by `ConsentGate` on every personal-data read, which records allowed accesses *and* denials |
 
 ## Repo structure
 
@@ -104,7 +104,11 @@ is safe to re-run.
 ## Non-negotiables
 
 - `docs/openapi/core.yaml` is the contract. Generate clients; never hand-edit `packages/api-client`.
-- No mock data in `apps/` or `services/core` — all fake government data lives behind `services/govsim`.
+- No mock data in `services/core` — all fake government data lives behind `services/govsim`.
+  `apps/officer-web` is the exception and is *known* to be mock-backed: the officer
+  endpoints it needs (`/v1/admin/summary`, `/outreach`, `/identity-queue`, an approve
+  action) do not exist, so its screens render `src/__mocks__` behind a visible
+  "Demo data" banner. Synthetic figures, labelled — but synthetic figures.
 - No real PII, ever. Test data comes from `data/synthetic` only.
 - Never store an Aadhaar number in plaintext — reference keys only.
 - Money in integer **paise**. Dates ISO-8601 with explicit zone.

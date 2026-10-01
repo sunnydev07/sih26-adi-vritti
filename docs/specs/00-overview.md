@@ -12,7 +12,9 @@ Scheduled Tribe students.
 1. **USID** — Unified Scholar ID via 3-stage identity resolution
    (deterministic → probabilistic → human adjudication).
 2. **Verified Claims Wallet** — verify a document once, reuse across all 5 schemes
-   until expiry.
+   until expiry. Values come from the verification adapter (e.g. DigiLocker); a
+   claim the API creates carries no value, because only adapter-derived values are
+   persisted and `VerifyRequest` has no value field to invent one from.
 3. **Verification Orchestrator** — 4-tier strategy chain
    (gov-verified → corroborated → assisted → pending-review).
 4. **Eligibility & Conflict Engine** — rules as versioned JSON data, not code
@@ -26,7 +28,12 @@ Scheduled Tribe students.
 8. **Coverage Gap Engine** — privacy-preserving cross-ministry join using HMAC
    hashed keys under a shared rotating salt. No raw PII crosses ministries.
 9. **DPDP Consent** — guardian-linked family accounts (Pre-Matric = minors),
-   purpose-bound consent artefacts, append-only access audit.
+   purpose-bound consent artefacts, append-only access audit. Enforced, not
+   schema-only: `ConsentGate` denies claims, dashboard, disbursement and JAGO reads
+   without a live purpose-bound grant, and records the grant *or* the denial.
+   Caveats worth stating: guardian linkage is a `guardianName` match because
+   `scholar.guardian_usid` has no writer yet, and identity resolution mints USIDs
+   without a consent artefact (it creates the subject, it does not read one).
 
 ## Service map
 

@@ -21,5 +21,16 @@ services:
 
   # No core mount: the runtime image contains only the packaged boot JAR
   # (app.jar), so there is no /app/src to shadow. Java changes need
-  # `make rebuild`; the rules-as-data JSON is mounted from packages/rules by the
-  # base file and does hot-reload.
+  # `make rebuild`.
+  core:
+    environment:
+      # The rules JSON is mounted read-only by the base file, so an edit cannot be
+      # watched for; this clears the in-process rule cache instead, which is what
+      # makes the hot-reload claim below true. 2s is a dev-only value.
+      APP_RULES_WATCH_INTERVAL_MS: "2000"
+
+# The rules-as-data JSON mounted from packages/rules by the base file does
+# hot-reload — but only via the cache invalidation above, not via an inotify
+# watch on the read-only mount. `scheme_rule_version` is still written at
+# startup, so a rule edit is visible on disk immediately and in the mirror
+# after the next `make rebuild`.

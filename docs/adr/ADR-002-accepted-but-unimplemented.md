@@ -41,6 +41,38 @@ the append-only `access_audit`, and the officer decision records.
 - Rule-files-vs-`schema.json` startup validation: `RuleValidator`, fail-closed.
 - `packages/api-client`: regenerated and typechecked in CI (`make api`).
 
+Closed since this ADR was accepted:
+
+- **DPDP access audit (was: never written).** `ConsentGate` is now the choke point
+  for every personal-data read — claims, dashboard, disbursements and all seven
+  JAGO tools — and it records BOTH allowed accesses and blocked denials, so the
+  "who looked at my data" trail is no longer empty. Denials matter as much as
+  grants here: a trail that only shows successes cannot answer the question the
+  feature exists for.
+- **Claim values (was: every claim valueless).** `VerificationOrchestrator`
+  persists adapter-sourced values, so a DigiLocker-sourced income/ST/class claim can
+  satisfy a rule. The constraint that makes this safe is that only adapters write
+  values and `VerifyRequest` carries no value field, so a caller cannot invent one.
+- **Rules hot-reload (was: comment claimed it, code did not).**
+  `EligibilityService.invalidateRuleCache` drops the in-process cache on a timer,
+  enabled only by the dev override. `scheme_rule_version` is still written at
+  startup, so a rule edit is visible on disk immediately and in the mirror only
+  after a restart — deliberately, so a malformed edit cannot reach the database.
+
+Still open, and deliberately so:
+
+- `scholar.guardian_usid` has no writer. Minor consent is matched by `guardianName`
+  string comparison, which is weak: a shared name grants access. Wiring guardian
+  USIDs is the fix, and it needs identity resolution to mint a second identity for
+  the guardian.
+- `ConsentService.audit` is documented as officer-only but is reachable by the
+  owning scholar, since it uses the same `access.check(usid)` as a student-scoped
+  read. A scholar seeing their own access trail is arguably correct DPDP
+  behaviour; the docs and the code disagree about intent and one must change.
+- Officer-console backend endpoints (`/v1/admin/summary`, `/outreach`,
+  `/identity-queue`, approve action) do not exist; the console renders demo data and
+  says so in a banner.
+
 ## Consequences
 
 - New tables must ship with a writer, a reader, and a test in the same change;

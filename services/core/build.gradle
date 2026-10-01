@@ -46,7 +46,8 @@ dependencies {
     // hand-written contract can never silently diverge from the controllers.
     // -api (not -ui): no Swagger UI, just the machine-readable document.
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-api:2.8.17'
-    implementation 'com.github.ben-manes.caffeine:caffeine'
+    // Dropped: caffeine had zero imports. CacheConfig no longer uses CaffeineCacheManager
+    // (it is Redis-backed with per-cache TTLs), so the dependency only cost image size.
     testImplementation('org.springframework.boot:spring-boot-starter-test') {
         exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
     }
