@@ -28,7 +28,7 @@ def hash_key(
 
 @router.post("/query")
 def query(q: GapQuery, _: None = Depends(require_service_token)) -> dict:
-    # Coverage analytics are served by Core (/v1/admin/coverage/gaps), which owns
+    # Coverage analytics are served by Core (/v1/admin/coverage-gap), which owns
     # the database access and the officer authorisation. This route stays a
     # documented stub rather than returning invented figures.
     return {
@@ -37,5 +37,5 @@ def query(q: GapQuery, _: None = Depends(require_service_token)) -> dict:
         "total_gap": 0,
         "schools": [],
         "filters": q.model_dump(),
-        "note": "not implemented here; use GET /v1/admin/coverage/gaps on Core",
+        "note": "not implemented here; use GET /v1/admin/coverage-gap on Core",
     }

@@ -26,7 +26,10 @@ TIMEOUT_SECONDS = 10.0
 # Both used to be folded into an empty-but-successful payload, so a completely
 # broken integration looked exactly like a student with no applications.
 ROUTE_FOR_TOOL: dict[str, tuple[str, str]] = {
-    "get_my_applications": ("GET", "/v1/disbursements/{usid}"),
+    # `get_my_applications` goes through Core's JAGO tool endpoint, which reads
+    # the application rows. Pointing it at the disbursement endpoint returned
+    # payment data for a question about applications.
+    "get_my_applications": ("POST", "/v1/jago/tool/get_my_applications"),
     "why_is_payment_pending": ("GET", "/v1/disbursements/{usid}"),
     "get_disbursement_history": ("GET", "/v1/disbursements/{usid}"),
     "check_eligibility": ("POST", "/v1/eligibility/evaluate"),

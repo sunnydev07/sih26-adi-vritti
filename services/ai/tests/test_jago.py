@@ -162,7 +162,7 @@ def test_an_empty_but_successful_core_response_stays_successful(monkeypatch):
 @pytest.mark.parametrize(
     ("tool", "method", "path"),
     [
-        ("get_my_applications", "GET", f"/v1/disbursements/{USID}"),
+        ("get_my_applications", "POST", "/v1/jago/tool/get_my_applications"),
         ("why_is_payment_pending", "GET", f"/v1/disbursements/{USID}"),
         ("get_disbursement_history", "GET", f"/v1/disbursements/{USID}"),
         ("check_eligibility", "POST", "/v1/eligibility/evaluate"),
@@ -185,6 +185,18 @@ def test_the_usid_is_always_sent_to_core(monkeypatch):
     client.post("/jago/tool/check_eligibility", json={"usid": USID}, headers=AUTH)
     # POST evaluate takes the USID in the body.
     assert _FakeClient.last["json"] == {"usid": USID}
+
+
+def test_get_my_applications_posts_the_usid_to_cores_jago_tool(monkeypatch):
+    # Core's JAGO tool endpoint binds the USID from the request body
+    # (ToolRequest), so a GET with the USID only in the path would 400.
+    _install(monkeypatch, _Response(200, {"applications": []}))
+    r = client.post("/jago/tool/get_my_applications", json={"usid": USID}, headers=AUTH)
+    assert r.status_code == 200
+    assert _FakeClient.last["method"] == "POST"
+    assert _FakeClient.last["path"] == "/v1/jago/tool/get_my_applications"
+    assert _FakeClient.last["json"] == {"usid": USID}
+    assert _FakeClient.last["params"] is None
 
 
 # --- caller parameters must actually reach Core -------------------------------
