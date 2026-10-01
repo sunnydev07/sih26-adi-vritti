@@ -329,10 +329,12 @@ paths:
           in: query
           schema:
             type: string
-            # stp_score is a documented ExceptionItem field but is not a sortable
-            # column: it is emitted as 0.0 until the STP scorer lands, so listing it
-            # here advertised an ordering the service cannot honour. created_at is
-            # accepted by the service and is now documented to match.
+            # breach_risk (the default) orders by the computed per-row risk
+            # score, descending. Risk is derived in the service, not stored,
+            # so the filtered set is ordered in memory before paging.
+            # stp_score is a documented ExceptionItem field but is not a
+            # sortable column: it is a triage heuristic, not an ordering key.
+            # created_at is accepted by the service and is documented to match.
             enum: [breach_risk, sla_deadline, created_at]
             default: breach_risk
         - name: stage
@@ -789,7 +791,10 @@ components:
         student_name: { type: string }
         scheme: { type: string }
         stage: { type: string }
-        stp_score: { type: number, minimum: 0, maximum: 1 }
+        # 0..100 percent scale to match the console's >= 85 auto-approve
+        # threshold. (Previously documented 0..1 while the service always
+        # emitted 0.0, so the mismatch never surfaced.)
+        stp_score: { type: number, minimum: 0, maximum: 100 }
         breach_risk: { type: number, minimum: 0, maximum: 1 }
         sla_deadline: { type: string, format: date-time }
 

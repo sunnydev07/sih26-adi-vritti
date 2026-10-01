@@ -13,11 +13,13 @@ import in.adivritti.core.admin.AdminController;
 import in.adivritti.core.admin.CoverageGapService;
 import in.adivritti.core.admin.dto.AdminDtos.CoverageGapResponse;
 import in.adivritti.core.application.SlaCalculator;
+import in.adivritti.core.application.StpScoreCalculator;
 import in.adivritti.core.application.entity.Application;
 import in.adivritti.core.application.repository.ApplicationRepository;
 import in.adivritti.core.claims.ClaimsController;
 import in.adivritti.core.claims.ClaimsService;
 import in.adivritti.core.security.ScholarAccessGuard;
+import in.adivritti.core.verification.repository.DeficiencyRepository;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -61,6 +63,7 @@ class ContractQueryParamBindingTest {
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
                 new AdminController(gaps, applications, mock(SlaCalculator.class),
+                    mock(StpScoreCalculator.class), mock(DeficiencyRepository.class),
                     new ScholarAccessGuard(false)),
                 new ClaimsController(claims, new ScholarAccessGuard(false)))
             .build();
@@ -91,7 +94,11 @@ class ContractQueryParamBindingTest {
     void pageSizeBinds() throws Exception {
         when(applications.findAll(any(Pageable.class))).thenReturn(Page.<Application>empty());
 
+        // created_at is a pageable sort: page/page_size must reach PageRequest.
+        // (The default breach_risk sort orders in memory and slices the ordered
+        // list instead — see AdminExceptionsTest.)
         mvc.perform(get("/v1/admin/exceptions")
+                .param("sort", "created_at")
                 .param("page", "2")
                 .param("page_size", "5"))
             .andExpect(status().isOk());

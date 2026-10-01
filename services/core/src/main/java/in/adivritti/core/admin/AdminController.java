@@ -4,13 +4,16 @@ import in.adivritti.core.admin.dto.AdminDtos.CoverageGapResponse;
 import in.adivritti.core.admin.dto.AdminDtos.ExceptionItem;
 import in.adivritti.core.admin.dto.AdminDtos.ExceptionPage;
 import in.adivritti.core.application.SlaCalculator;
+import in.adivritti.core.application.StpScoreCalculator;
 import in.adivritti.core.application.entity.Application;
 import in.adivritti.core.application.repository.ApplicationRepository;
 import in.adivritti.core.security.ScholarAccessGuard;
+import in.adivritti.core.verification.repository.DeficiencyRepository;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.util.Comparator;
 import java.util.List;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -36,13 +39,18 @@ public class AdminController {
     private final CoverageGapService gaps;
     private final ApplicationRepository applications;
     private final SlaCalculator sla;
+    private final StpScoreCalculator stp;
+    private final DeficiencyRepository deficiencies;
     private final ScholarAccessGuard access;
 
     public AdminController(CoverageGapService gaps, ApplicationRepository applications,
-        SlaCalculator sla, ScholarAccessGuard access) {
+        SlaCalculator sla, StpScoreCalculator stp, DeficiencyRepository deficiencies,
+        ScholarAccessGuard access) {
         this.gaps = gaps;
         this.applications = applications;
         this.sla = sla;
+        this.stp = stp;
+        this.deficiencies = deficiencies;
         this.access = access;
     }
 
@@ -59,9 +67,10 @@ public class AdminController {
 
     /**
      * SLA breach queue. {@code sort=sla_deadline} orders by soonest deadline first —
-     * the work an officer should do next. {@code breach_risk} (the default) and
-     * {@code created_at} order newest-first: the per-row risk score is computed in
-     * {@link #toItem} but is not a sortable column yet.
+     * the work an officer should do next. {@code breach_risk} (the default) orders
+     * by computed risk descending: risk is not a stored column, so the filtered
+     * set is ordered in memory before paging. {@code created_at} orders
+     * newest-first.
      */
     @GetMapping("/exceptions")
     ResponseEntity<ExceptionPage> exceptions(
@@ -74,13 +83,39 @@ public class AdminController {
         @RequestParam(name = "scheme", required = false) @Size(max = 16) String scheme) {
 
         access.checkOfficer();
+        boolean hasStage = stage != null && !stage.isBlank();
+        boolean hasScheme = scheme != null && !scheme.isBlank();
+
+        if ("breach_risk".equals(sort)) {
+            // Risk lives in Java, not in a column: order the filtered set by
+            // computed risk (newest first on ties, so the order is stable) and
+            // page the ordered list.
+            List<Application> filtered = hasStage && hasScheme
+                ? applications.findByStageAndScheme(stage, scheme)
+                : hasStage
+                    ? applications.findByStage(stage)
+                    : hasScheme
+                        ? applications.findByScheme(scheme)
+                        : applications.findAll();
+            List<Application> ordered = filtered.stream()
+                .sorted(Comparator.comparingDouble(this::risk).reversed()
+                    .thenComparing(Comparator.comparing(
+                        (Application a) -> a.createdAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                        .reversed()))
+                .toList();
+            List<ExceptionItem> items = ordered.stream()
+                .skip((long) (page - 1) * pageSize)
+                .limit(pageSize)
+                .map(this::toItem)
+                .toList();
+            return ResponseEntity.ok(new ExceptionPage(items, ordered.size(), page, pageSize));
+        }
+
         Sort order = "sla_deadline".equals(sort)
             ? Sort.by(Sort.Direction.ASC, "slaDeadline")
             : Sort.by(Sort.Direction.DESC, "createdAt");
         var pageable = PageRequest.of(page - 1, pageSize, order);
 
-        boolean hasStage = stage != null && !stage.isBlank();
-        boolean hasScheme = scheme != null && !scheme.isBlank();
         var result = hasStage && hasScheme
             ? applications.findByStageAndScheme(stage, scheme, pageable)
             : hasStage
@@ -96,15 +131,25 @@ public class AdminController {
             page, pageSize));
     }
 
+    private double risk(Application a) {
+        if (a.slaDeadline == null) return 0.0;
+        return sla.breachRisk(a.stage, a.createdAt);
+    }
+
     /**
      * studentName is intentionally left null here. Rendering a name in the exception
      * queue is a DPDP personal-data access and must go through a consent-gated,
      * audited lookup rather than being smuggled into an officer's exception list.
      */
     private ExceptionItem toItem(Application a) {
-        double risk = a.slaDeadline == null ? 0.0
-            : sla.breachRisk(a.stage, a.createdAt);
-        return new ExceptionItem(a.id, a.usid, null, a.scheme, a.stage, 0.0, risk,
+        double risk = risk(a);
+        // One deficiency lookup per row (pages are capped at 100). An STP score
+        // without the deficiency penalty would green-light applications that
+        // still need a scholar to act.
+        boolean openDeficiency = deficiencies.findByApplicationIdOrderByCreatedAtAsc(a.id)
+            .stream().anyMatch(d -> "open".equals(d.status));
+        double score = stp.score(a.stage, a.createdAt, openDeficiency);
+        return new ExceptionItem(a.id, a.usid, null, a.scheme, a.stage, score, risk,
             a.slaDeadline);
     }
 }

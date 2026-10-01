@@ -19,4 +19,16 @@ public interface ApplicationRepository extends JpaRepository<Application, UUID> 
     Page<Application> findByScheme(String scheme, Pageable pageable);
 
     Page<Application> findByStageAndScheme(String stage, String scheme, Pageable pageable);
+
+    /**
+     * Unpaged variants for the {@code breach_risk} sort: risk is computed in
+     * Java, not stored, so the queue loads the filtered set and orders it in
+     * memory. Fine at console scale; revisit with a stored column if the
+     * exception queue ever pages over large filtered sets.
+     */
+    List<Application> findByStage(String stage);
+
+    List<Application> findByScheme(String scheme);
+
+    List<Application> findByStageAndScheme(String stage, String scheme);
 }
