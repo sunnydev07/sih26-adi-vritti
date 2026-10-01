@@ -24,8 +24,13 @@ export function relativeTime(iso: string): string {
   return `${days} days ago`;
 }
 
-export function greetingFor(date: Date): string {
+export function greetingFor(date: Date, lang: "en" | "hi" = "en"): string {
   const h = date.getHours();
+  if (lang === "hi") {
+    if (h < 12) return "सुप्रभात";
+    if (h < 17) return "नमस्कार";
+    return "शुभ संध्या";
+  }
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";

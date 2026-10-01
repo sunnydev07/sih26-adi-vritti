@@ -14,6 +14,7 @@ import {
   type IconName,
 } from "@/components/ui";
 import { successTap } from "@/lib/feedback";
+import { useLang } from "@/lib/lang";
 import { claimWords } from "@/lib/plainLanguage";
 import { colors } from "@/lib/theme";
 import { mockClaims } from "@/lib/jago";
@@ -35,6 +36,7 @@ type ConnectState = "idle" | "busy" | "done";
 
 export default function WalletScreen() {
   const router = useRouter();
+  const { t } = useLang();
   const [claims] = useState(mockClaims);
   const [connect, setConnect] = useState<ConnectState>("idle");
 
@@ -50,9 +52,9 @@ export default function WalletScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.page }}>
       <ScreenHeader
-        eyebrow="Verified once · reused in 5 schemes"
-        title="Document Wallet"
-        subtitle={`${claims.filter((c) => c.status === "valid").length} of ${claims.length} documents ready`}
+        eyebrow={t.walletEyebrow}
+        title={t.walletTitle}
+        subtitle={t.walletReady(claims.filter((c) => c.status === "valid").length, claims.length)}
         icon="wallet"
       />
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 128 }}>
@@ -62,23 +64,22 @@ export default function WalletScreen() {
               <Ionicons name="checkmark-circle" size={24} color="#047857" />
               <View style={{ flex: 1 }}>
                 <Tx variant="body" weight="extrabold" color="#047857">
-                  DigiLocker staged (demo)
+                  {t.walletStagedTitle}
                 </Tx>
                 <Tx variant="caption" color="#047857">
-                  Staged locally only — documents will not actually refresh. In
-                  integration this links DigiLocker via POST /v1/verify.
+                  {t.walletStagedSub}
                 </Tx>
               </View>
             </Card>
           ) : (
             <PrimaryButton
-              title={connect === "busy" ? "Connecting…" : "Connect DigiLocker"}
+              title={connect === "busy" ? t.walletConnecting : t.walletConnect}
               icon={connect === "busy" ? "sync" : "cloud-upload"}
               onPress={connectLocker}
             />
           )}
           <View style={{ marginTop: 10 }}>
-            <GhostButton title="Scan document" icon="scan" onPress={() => router.push("/chat")} />
+            <GhostButton title={t.walletScan} icon="scan" onPress={() => router.push("/chat")} />
           </View>
         </Rise>
 
@@ -134,7 +135,7 @@ export default function WalletScreen() {
             <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
               <Ionicons name="shield-checkmark" size={18} color={colors.primaryStrong} />
               <Tx variant="caption" color={colors.primaryStrong} style={{ flex: 1 }}>
-                Verified once, reused across all 5 schemes until expiry. You never upload the same paper twice.
+                {t.walletExplainer}
               </Tx>
             </View>
           </Card>

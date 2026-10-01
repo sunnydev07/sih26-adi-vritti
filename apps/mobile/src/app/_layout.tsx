@@ -9,6 +9,7 @@ import {
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { Slot } from "expo-router";
+import { LangProvider } from "@/lib/lang";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -29,5 +30,9 @@ export default function RootLayout() {
   }, [loaded, error]);
 
   if (!loaded && !error) return null;
-  return <Slot />;
+  return (
+    <LangProvider>
+      <Slot />
+    </LangProvider>
+  );
 }

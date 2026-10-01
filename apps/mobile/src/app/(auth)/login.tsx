@@ -4,10 +4,12 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { TextInput, View } from "react-native";
 import { PrimaryButton, Rise, Tx } from "@/components/ui";
+import { useLang } from "@/lib/lang";
 import { colors } from "@/lib/theme";
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { t } = useLang();
   const [phone, setPhone] = useState("");
 
   return (
@@ -61,7 +63,7 @@ export default function LoginScreen() {
           Adi-Vritti
         </Tx>
         <Tx variant="body" weight="medium" color="#C7D2FE" style={{ marginTop: 4 }}>
-          One student. One identity. Five schemes.
+          {t.loginTagline}
         </Tx>
       </Rise>
 
@@ -75,7 +77,7 @@ export default function LoginScreen() {
           }}
         >
           <Tx variant="caption" weight="extrabold">
-            Mobile number
+            {t.loginMobileLabel}
           </Tx>
           <View
             style={{
@@ -110,10 +112,10 @@ export default function LoginScreen() {
             {phone.length === 10 ? <Ionicons name="checkmark-circle" size={20} color="#047857" /> : null}
           </View>
           <View style={{ marginTop: 14 }}>
-            <PrimaryButton amber title="Send OTP" icon="chatbox" onPress={() => router.replace("/(tabs)")} />
+            <PrimaryButton amber title={t.loginSendOtp} icon="chatbox" onPress={() => router.replace("/(tabs)")} />
           </View>
           <Tx variant="tiny" color={colors.muted} style={{ marginTop: 12, textAlign: "center" }}>
-            Demo build — any 10-digit number works. OTP arrives on SMS in production.
+            {t.loginDemoNote}
           </Tx>
         </View>
       </Rise>

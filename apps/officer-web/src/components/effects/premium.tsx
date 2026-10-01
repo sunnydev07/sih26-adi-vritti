@@ -7,12 +7,14 @@ import { cn } from "@/lib/utils";
 /** Magic-UI style animated counter. Counts up on mount. */
 export function NumberTicker({ value, format }: { value: number; format: (n: number) => string }) {
   const reduce = useReducedMotion();
-  const [display, setDisplay] = React.useState(0);
+  // The reduced-motion final state is the initial state, not an effect
+  // update: setting it inside the effect trips set-state-in-effect.
+  const [display, setDisplay] = React.useState(() => (reduce ? value : 0));
+  // Render-time adjustment (not an effect update): if the value changes while
+  // reduced motion is on, the final state is still the correct state.
+  if (reduce && display !== value) setDisplay(value);
   React.useEffect(() => {
-    if (reduce) {
-      setDisplay(value);
-      return;
-    }
+    if (reduce) return;
     let raf = 0;
     const start = performance.now();
     const dur = 1200;

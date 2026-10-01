@@ -20,6 +20,7 @@ import {
   shadow,
 } from "@/components/ui";
 import { formatPaise, greetingFor } from "@/lib/format";
+import { useLang } from "@/lib/lang";
 import { slaWords } from "@/lib/plainLanguage";
 import { colors, radius, toneColors } from "@/lib/theme";
 import { mockDashboard } from "@/lib/jago";
@@ -30,9 +31,10 @@ function Chevron({ open }: { open: boolean }) {
 }
 
 function HomeSkeleton({ name, greet }: { name: string; greet: string }) {
+  const { t } = useLang();
   return (
     <View style={{ flex: 1, backgroundColor: colors.page }}>
-      <ScreenHeader eyebrow="Adi-Vritti · Student" title={`${greet}, ${name}`} subtitle="Syncing…" avatar={name.slice(0, 1)} />
+      <ScreenHeader eyebrow={t.homeEyebrow} title={`${greet}, ${name}`} subtitle={t.profileSyncBusy} avatar={name.slice(0, 1)} />
       <View style={{ padding: 16, gap: 12 }}>
         <Skeleton h={168} r={radius.card} />
         <Skeleton h={150} r={radius.card} />
@@ -57,7 +59,8 @@ export default function StudentDashboardScreen() {
   const [showSchemes, setShowSchemes] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const greet = greetingFor(new Date());
+  const { lang, t } = useLang();
+  const greet = greetingFor(new Date(), lang);
 
   useEffect(() => {
     const t = setTimeout(() => setReady(true), 800);
@@ -85,9 +88,9 @@ export default function StudentDashboardScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.page }}>
       <ScreenHeader
-        eyebrow="Adi-Vritti · Student"
+        eyebrow={t.homeEyebrow}
         title={`${greet}, ${d.greetingName}`}
-        subtitle={d.offline ? "Offline — showing cached data" : "Demo preview — not synced yet"}
+        subtitle={d.offline ? t.homeOffline : t.homeDemoPreview}
         avatar={d.greetingName.slice(0, 1)}
       />
       <ScrollView
@@ -101,7 +104,7 @@ export default function StudentDashboardScreen() {
           <Rise delay={40}>
             <PressableScale
               accessibilityRole="link"
-              accessibilityLabel={`${hero.scheme} file: ${heroSla.headline}. Open timeline.`}
+              accessibilityLabel={`${hero.scheme} file: ${heroSla.headline}. ${t.homeSeeTimeline}.`}
               onPress={() => router.push(`/application/${hero.id}`)}
               haptic
             >
@@ -126,7 +129,7 @@ export default function StudentDashboardScreen() {
                 </View>
                 <View style={{ marginTop: 10, flexDirection: "row", alignItems: "center", gap: 2 }}>
                   <Tx variant="caption" weight="extrabold" color={colors.primaryStrong}>
-                    See full timeline
+                    {t.homeSeeTimeline}
                   </Tx>
                   <Ionicons name="chevron-forward" size={15} color={colors.primaryStrong} />
                 </View>
@@ -152,7 +155,7 @@ export default function StudentDashboardScreen() {
             >
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                 <Ionicons name="alert-circle" size={15} color="#B45309" />
-                <Eyebrow color="#B45309">Do this next</Eyebrow>
+                <Eyebrow color="#B45309">{t.homeDoNext}</Eyebrow>
               </View>
               <Tx variant="body" weight="semibold" style={{ marginTop: 6 }}>
                 {firstAction.title}
@@ -169,10 +172,10 @@ export default function StudentDashboardScreen() {
                 <PressableScale
                   onPress={() => setShowActions((s) => !s)}
                   style={{ marginTop: 10, alignItems: "center", paddingVertical: 6 }}
-                  accessibilityLabel={showActions ? "Hide more actions" : `Show ${restActions.length} more actions`}
+                  accessibilityLabel={showActions ? t.homeHide : t.homeMoreActions(restActions.length)}
                 >
                   <Tx variant="caption" weight="bold" color={colors.primaryStrong}>
-                    {showActions ? "Hide" : `+${restActions.length} more action${restActions.length === 1 ? "" : "s"}`}
+                    {showActions ? t.homeHide : t.homeMoreActions(restActions.length)}
                   </Tx>
                 </PressableScale>
               ) : null}
@@ -206,7 +209,7 @@ export default function StudentDashboardScreen() {
         ) : null}
 
         <Rise delay={200}>
-          <SectionTitle title="Money" action="Ask Adi →" onAction={() => router.push("/chat")} />
+          <SectionTitle title={t.homeMoney} action={t.homeAskAdi} onAction={() => router.push("/chat")} />
           <View style={{ flexDirection: "row", gap: 10 }}>
             <View style={{ flex: 1 }}>
               <Card style={{ backgroundColor: "#ECFDF5", borderColor: "#A7F3D0" }}>
@@ -223,11 +226,11 @@ export default function StudentDashboardScreen() {
                   <Ionicons name="cash" size={18} color="#fff" />
                 </View>
                 <Tx variant="caption" weight="bold" color="#047857" style={{ marginTop: 8 }}>
-                  Received
+                  {t.homeReceived}
                 </Tx>
                 <Money paise={d.receivedPaise} color="#047857" />
                 <Tx variant="tiny" color="#047857">
-                  Safe in your bank
+                  {t.homeReceivedSub}
                 </Tx>
               </Card>
             </View>
@@ -246,11 +249,11 @@ export default function StudentDashboardScreen() {
                   <Ionicons name="time" size={18} color="#fff" />
                 </View>
                 <Tx variant="caption" weight="bold" color="#B45309" style={{ marginTop: 8 }}>
-                  Pending
+                  {t.homePending}
                 </Tx>
                 <Money paise={d.pendingPaise} color="#B45309" />
                 <Tx variant="tiny" color="#B45309">
-                  On the way
+                  {t.homePendingSub}
                 </Tx>
               </Card>
             </View>
@@ -258,7 +261,7 @@ export default function StudentDashboardScreen() {
         </Rise>
 
         <Rise delay={280}>
-          <SectionTitle title="My scholarships" />
+          <SectionTitle title={t.homeSchemes} />
           {featured ? (
             <PressableScale onPress={() => setShowSchemes((s) => !s)} haptic>
               <Card style={{ backgroundColor: "#EEF2FF", borderColor: "#C7D2FE", borderWidth: 1.5 }}>
@@ -291,7 +294,7 @@ export default function StudentDashboardScreen() {
                   {formatPaise(featured.amountPaise)}
                 </Tx>
                 <Tx variant="caption" color={colors.muted}>
-                  {eligible.length} you can get · tap to see all 5
+                  {t.homeEligibleLine(eligible.length)}
                 </Tx>
               </Card>
             </PressableScale>
@@ -339,10 +342,10 @@ export default function StudentDashboardScreen() {
                         </Tx>
                       ) : null}
                     </View>
-                    {s.reason ? (
-                      <Tx variant="tiny" color={colors.muted} style={{ marginTop: 6 }}>
-                        {s.eligible ? s.reason : `Why not: ${s.reason}`}
-                      </Tx>
+                      {s.reason ? (
+                        <Tx variant="tiny" color={colors.muted} style={{ marginTop: 6 }}>
+                          {s.eligible ? s.reason : `${t.homeWhyNot}${s.reason}`}
+                        </Tx>
                     ) : null}
                   </Card>
                 </Rise>
@@ -351,7 +354,7 @@ export default function StudentDashboardScreen() {
           ) : (
             <View style={{ marginTop: 10 }}>
               <GhostButton
-                title={`Show all 5 scholarships`}
+                title={t.homeShowAll}
                 icon="list"
                 onPress={() => setShowSchemes(true)}
               />

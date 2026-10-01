@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { successTap } from "@/lib/feedback";
 import { maskAadhaar } from "@/lib/format";
+import { useLang } from "@/lib/lang";
 import { colors } from "@/lib/theme";
 
 type SyncState = "idle" | "busy" | "done";
@@ -74,6 +75,7 @@ function Row({
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { lang, t, toggle } = useLang();
   const [sync, setSync] = useState<SyncState>("idle");
   const [offlineFiles, setOfflineFiles] = useState(true);
 
@@ -89,7 +91,7 @@ export default function ProfileScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.page }}>
       <ScreenHeader
-        eyebrow="Student profile"
+        eyebrow={t.profileEyebrow}
         title="Sunita Meena"
         subtitle="Scholar ID ··A91F04C2 · Mandla, MP"
         avatar="S"
@@ -98,17 +100,17 @@ export default function ProfileScreen() {
         <Rise delay={40}>
           <Card>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <Eyebrow>My identity</Eyebrow>
-              <Pill tone="ok" label="Verified" icon="shield-checkmark" />
+              <Eyebrow>{t.profileIdentity}</Eyebrow>
+              <Pill tone="ok" label={t.profileVerified} icon="shield-checkmark" />
             </View>
-            <Row icon="lock-closed" title={`Aadhaar ${maskAadhaar("XXXX4821")}`} sub="Never shown in full — not even to officers" />
-            <Row icon="finger-print" title="USID ··A91F04C2" sub="One ID across all 5 schemes" />
+            <Row icon="lock-closed" title={`Aadhaar ${maskAadhaar("XXXX4821")}`} sub={t.profileAadhaarSub} />
+            <Row icon="finger-print" title="USID ··A91F04C2" sub={t.profileUsidSub} />
           </Card>
         </Rise>
 
         <Rise delay={120}>
           <Card style={{ marginTop: 12 }}>
-            <Eyebrow>Who looked at my data</Eyebrow>
+            <Eyebrow>{t.profileAudit}</Eyebrow>
             <Row icon="eye" title="District Nodal Officer" sub="Viewed file APP-90412 · 12 Aug" />
             <Row icon="card" title="Payment system (PFMS)" sub="Checked bank details · 18 Sep" />
           </Card>
@@ -116,11 +118,25 @@ export default function ProfileScreen() {
 
         <Rise delay={200}>
           <Card style={{ marginTop: 12 }}>
-            <Eyebrow>Settings</Eyebrow>
+            <Eyebrow>{t.profileSettings}</Eyebrow>
+            <Row
+              icon="language"
+              title={t.profileLanguage}
+              sub={lang === "en" ? t.profileLangSubEn : t.profileLangSubHi}
+              onPress={() => {
+                toggle();
+                successTap();
+              }}
+              right={
+                <Tx variant="body" weight="extrabold" color={colors.primaryStrong}>
+                  {lang === "en" ? "EN" : "हिं"}
+                </Tx>
+              }
+            />
             <Row
               icon="sync"
-              title="Sync now"
-              sub={sync === "done" ? "Demo — nothing was synced (sync is not wired yet)" : sync === "busy" ? "Syncing…" : "Pull the latest file status"}
+              title={t.profileSync}
+              sub={sync === "done" ? t.profileSyncDone : sync === "busy" ? t.profileSyncBusy : t.profileSyncIdle}
               onPress={syncNow}
               right={
                 sync === "busy" ? (
@@ -132,8 +148,8 @@ export default function ProfileScreen() {
             />
             <Row
               icon="download"
-              title="Keep files offline"
-              sub="Read status without internet"
+              title={t.profileOffline}
+              sub={t.profileOfflineSub}
               right={
                 <Switch
                   value={offlineFiles}
@@ -142,7 +158,7 @@ export default function ProfileScreen() {
                 />
               }
             />
-            <Row icon="chatbubbles" title="Help & Ask Adi" sub="Hindi, English, Santali, Gondi" onPress={() => router.push("/chat")} />
+            <Row icon="chatbubbles" title={t.profileHelp} sub="Hindi, English, Santali, Gondi" onPress={() => router.push("/chat")} />
           </Card>
         </Rise>
 
@@ -167,7 +183,7 @@ export default function ProfileScreen() {
           >
             <Ionicons name="log-out" size={18} color="#BE123C" />
             <Tx variant="body" weight="extrabold" color="#BE123C">
-              Sign out
+              {t.profileSignOut}
             </Tx>
           </PressableScale>
         </Rise>

@@ -154,6 +154,20 @@ jobs:
       - run: npm test
         working-directory: services/govsim
 
+  token-mirrors:
+    # packages/ui-tokens is the single source of truth, but mobile carries a
+    # git-tracked vendor copy (Expo cannot resolve the workspace package) and
+    # the AI help lane reads its own help_faq.json path. Both must stay
+    # byte-identical to the canonical files; a red job means someone edited
+    # one side without re-running the sync.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node scripts/check-token-mirrors.mjs
+
   stack:
     runs-on: ubuntu-latest
     timeout-minutes: 30

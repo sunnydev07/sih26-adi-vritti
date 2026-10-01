@@ -14,6 +14,7 @@ import {
   type IconName,
 } from "@/components/ui";
 import { successTap } from "@/lib/feedback";
+import { useLang } from "@/lib/lang";
 import { claimWords } from "@/lib/plainLanguage";
 import { colors } from "@/lib/theme";
 import { mockClaims } from "@/lib/jago";
@@ -28,6 +29,7 @@ const DOC_ICON: Record<string, IconName> = {
 export default function ClaimDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { t } = useLang();
   const [requested, setRequested] = useState(false);
   const claim = mockClaims.find((c) => c.id === id);
 
@@ -35,10 +37,10 @@ export default function ClaimDetailScreen() {
     return (
       <View style={{ flex: 1, backgroundColor: colors.page, padding: 20, paddingTop: 64 }}>
         <Tx variant="title" weight="extrabold">
-          Document not found
+          {t.claimNotFound}
         </Tx>
         <View style={{ marginTop: 16 }}>
-          <PrimaryButton title="Go back" icon="arrow-back" onPress={() => router.back()} />
+          <PrimaryButton title={t.claimGoBack} icon="arrow-back" onPress={() => router.back()} />
         </View>
       </View>
     );
@@ -57,13 +59,13 @@ export default function ClaimDetailScreen() {
       <View style={{ padding: 16, paddingTop: 60, paddingBottom: 40 }}>
         <PressableScale
           onPress={() => router.back()}
-          accessibilityLabel="Go back"
+          accessibilityLabel={t.claimBack}
           style={{ alignSelf: "flex-start", padding: 6 }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
             <Ionicons name="arrow-back" size={18} color={colors.primaryStrong} />
             <Tx variant="body" weight="bold" color={colors.primaryStrong}>
-              Back
+              {t.claimBack}
             </Tx>
           </View>
         </PressableScale>
@@ -100,9 +102,9 @@ export default function ClaimDetailScreen() {
               {words.detail}
             </Tx>
             <View style={{ marginTop: 12, gap: 8 }}>
-              <MetaRow label="From" value={claim.source} />
-              <MetaRow label="Verified" value={inDate(claim.verifiedAt)} />
-              <MetaRow label="Valid till" value={inDate(claim.validUntil)} />
+              <MetaRow label={t.claimFrom} value={claim.source} />
+              <MetaRow label={t.claimVerifiedAt} value={inDate(claim.verifiedAt)} />
+              <MetaRow label={t.claimValidTill} value={inDate(claim.validUntil)} />
             </View>
           </Card>
         </Rise>
@@ -114,15 +116,13 @@ export default function ClaimDetailScreen() {
                 <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
                   <Ionicons name="checkmark-circle" size={22} color="#047857" />
                   <Tx variant="caption" weight="semibold" color="#047857" style={{ flex: 1 }}>
-                    Demo only — refetch is staged locally, no network call. In
-                    integration this refetches the document from DigiLocker
-                    via POST /v1/verify.
+                    {t.claimDemoRefetch}
                   </Tx>
                 </View>
               </Card>
             ) : (
               <View style={{ marginTop: 14 }}>
-                <PrimaryButton title="Refetch from DigiLocker" icon="refresh" onPress={refetch} />
+                <PrimaryButton title={t.claimRefetch} icon="refresh" onPress={refetch} />
               </View>
             )
           ) : (
@@ -130,7 +130,7 @@ export default function ClaimDetailScreen() {
               <View style={{ flexDirection: "row", gap: 8, alignItems: "flex-start" }}>
                 <Ionicons name="shield-checkmark" size={18} color={colors.primaryStrong} />
                 <Tx variant="caption" color={colors.primaryStrong} style={{ flex: 1 }}>
-                  Verified once, reused across all 5 schemes until expiry.
+                  {t.walletExplainer}
                 </Tx>
               </View>
             </Card>
@@ -139,14 +139,14 @@ export default function ClaimDetailScreen() {
 
         <Rise delay={260}>
           <View style={{ marginTop: 16 }}>
-            <Eyebrow>Still confused?</Eyebrow>
+            <Eyebrow>{t.claimConfused}</Eyebrow>
             <PressableScale
               onPress={() => router.push("/chat")}
               style={{ marginTop: 8, flexDirection: "row", alignItems: "center", gap: 4 }}
-              accessibilityLabel="Ask Adi about this document"
+              accessibilityLabel={t.claimAskAdi}
             >
               <Tx variant="body" weight="extrabold" color={colors.primaryStrong}>
-                Ask Adi about this document
+                {t.claimAskAdi}
               </Tx>
               <Ionicons name="chevron-forward" size={16} color={colors.primaryStrong} />
             </PressableScale>

@@ -9,7 +9,12 @@ import { Button } from "@/components/ui/button";
 export function Header({ title, subtitle }: { title: string; subtitle: string }) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
+  // Deferred past the effect body: a synchronous setMounted here trips
+  // react-hooks/set-state-in-effect with a cascading-render warning.
+  React.useEffect(() => {
+    const raf = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-white/75 backdrop-blur-xl dark:bg-slate-900/60">

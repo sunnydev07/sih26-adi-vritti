@@ -13,6 +13,7 @@ import {
   Tx,
 } from "@/components/ui";
 import { slaWords } from "@/lib/plainLanguage";
+import { useLang } from "@/lib/lang";
 import { colors, toneColors } from "@/lib/theme";
 import { mockDashboard } from "@/lib/jago";
 
@@ -20,19 +21,20 @@ import { mockDashboard } from "@/lib/jago";
 export default function ApplicationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { t } = useLang();
   const app = mockDashboard.applications.find((a) => a.id === id);
 
   if (!app) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.page, padding: 20, paddingTop: 64 }}>
         <Tx variant="title" weight="extrabold">
-          File not found
+          {t.appNotFound}
         </Tx>
         <Tx variant="caption" color={colors.muted} style={{ marginTop: 4 }}>
-          This application is not on your phone. Pull to sync on Home.
+          {t.appNotFoundSub}
         </Tx>
         <View style={{ marginTop: 16 }}>
-          <PrimaryButton title="Go back" icon="arrow-back" onPress={() => router.back()} />
+          <PrimaryButton title={t.appGoBack} icon="arrow-back" onPress={() => router.back()} />
         </View>
       </View>
     );
@@ -46,13 +48,13 @@ export default function ApplicationDetailScreen() {
       <View style={{ padding: 16, paddingTop: 60, paddingBottom: 40 }}>
         <PressableScale
           onPress={() => router.back()}
-          accessibilityLabel="Go back"
+          accessibilityLabel={t.appBack}
           style={{ alignSelf: "flex-start", padding: 6 }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
             <Ionicons name="arrow-back" size={18} color={colors.primaryStrong} />
             <Tx variant="body" weight="bold" color={colors.primaryStrong}>
-              Back
+              {t.appBack}
             </Tx>
           </View>
         </PressableScale>
@@ -73,7 +75,7 @@ export default function ApplicationDetailScreen() {
 
         <Rise delay={110}>
           <Card style={{ marginTop: 14, borderLeftWidth: 5, borderLeftColor: tone.color }}>
-            <Eyebrow>Waiting time</Eyebrow>
+            <Eyebrow>{t.appWaiting}</Eyebrow>
             <View style={{ marginTop: 8 }}>
               <AnimatedBar progress={app.elapsedDays / Math.max(1, app.slaDays)} color={tone.color} />
             </View>
@@ -85,14 +87,14 @@ export default function ApplicationDetailScreen() {
 
         <Rise delay={190}>
           <Card style={{ marginTop: 12 }}>
-            <Eyebrow>Where it is</Eyebrow>
+            <Eyebrow>{t.appWhere}</Eyebrow>
             <View style={{ marginTop: 12 }}>
               <Stepper
                 steps={[
-                  { label: "Application received", sub: "Your form reached the portal", state: "done" },
-                  { label: app.stage, sub: `With: ${app.actor}`, state: "now" },
-                  { label: "Officer decision", sub: "Approve or ask for one fix", state: "todo" },
-                  { label: "Bank payment", sub: "Money lands in your account", state: "todo" },
+                  { label: t.appStepReceived, sub: t.appStepReceivedSub, state: "done" },
+                  { label: app.stage, sub: `${t.appStepWith}${app.actor}`, state: "now" },
+                  { label: t.appStepDecision, sub: t.appStepDecisionSub, state: "todo" },
+                  { label: t.appStepPayment, sub: t.appStepPaymentSub, state: "todo" },
                 ]}
               />
             </View>
@@ -102,7 +104,7 @@ export default function ApplicationDetailScreen() {
         <Rise delay={270}>
           <View style={{ marginTop: 16 }}>
             <PrimaryButton
-              title="Ask Adi about this file"
+              title={t.appAskAdi}
               icon="chatbubbles"
               onPress={() => router.push("/chat")}
             />
