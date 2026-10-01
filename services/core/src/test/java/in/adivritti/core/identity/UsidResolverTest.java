@@ -131,4 +131,21 @@ class UsidResolverTest {
     void disjointStringsScoreLow() {
         assertTrue(UsidResolver.jaroWinkler("abc", "xyz") < 0.5);
     }
+
+    /**
+     * Captured, not guessed: the AI service's Python matcher
+     * ({@code services/ai/app/services/matching_service.py}) must produce these
+     * exact numbers, and its parity test pins them. Every value here was read off
+     * this implementation, so a change to the algorithm shows up as a failing
+     * number on BOTH sides rather than as silent cross-service drift.
+     */
+    @Test
+    void capturedValuesPinThePythonParityTable() {
+        assertEquals(0.805, UsidResolver.jaroWinkler("meena", "mina"), 0.0005);
+        assertEquals(0.866, UsidResolver.jaroWinkler("phulo gond", "phoolo gund"), 0.0005);
+        assertEquals(0.831, UsidResolver.jaroWinkler("lakhon ho", "lacon ho"), 0.0005);
+        assertEquals(0.909, UsidResolver.jaroWinkler("budhni devi", "budhni"), 0.0005);
+        assertEquals(0.700, UsidResolver.jaroWinkler("ab", "ac"), 0.0005);
+        assertEquals(0.910, UsidResolver.jaroWinkler("sunita meena", "sunita k. mina"), 0.0005);
+    }
 }
