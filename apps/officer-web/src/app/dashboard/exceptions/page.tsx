@@ -27,10 +27,22 @@ export default function ExceptionsPage() {
   const [selected, setSelected] = React.useState<ExceptionItem | null>(null);
   const [jevResult, setJevResult] = React.useState<JevStpResult | null>(null);
   const [isEvaluating, setIsEvaluating] = React.useState(false);
+  // A rejected queue load must not render "No files match" — that would read
+  // as an empty queue rather than a failed one.
+  const [loadFailed, setLoadFailed] = React.useState(false);
+
+  const load = React.useCallback(() => {
+    api.getExceptionQueue().then(setRows, () => setLoadFailed(true));
+  }, []);
 
   React.useEffect(() => {
-    api.getExceptionQueue().then(setRows);
-  }, []);
+    load();
+  }, [load]);
+
+  function retry() {
+    setLoadFailed(false);
+    load();
+  }
 
   React.useEffect(() => {
     if (!selected) {
@@ -38,10 +50,18 @@ export default function ExceptionsPage() {
       return;
     }
     setIsEvaluating(true);
-    api.evaluateStpWithJev(selected).then((res) => {
-      setJevResult(res);
-      setIsEvaluating(false);
-    });
+    api.evaluateStpWithJev(selected).then(
+      (res) => {
+        setJevResult(res);
+        setIsEvaluating(false);
+      },
+      () => {
+        // The queue row stays usable without the JEV card; the spinner must
+        // not hang. A null result renders the card's fallback, not an error.
+        setJevResult(null);
+        setIsEvaluating(false);
+      }
+    );
   }, [selected]);
 
   const filtered = React.useMemo(() => {
@@ -79,11 +99,18 @@ export default function ExceptionsPage() {
         className="flex items-center gap-1 hover:text-[var(--foreground)]"
         onClick={() => toggleSort(k)}
         aria-label={`Sort by ${label}${sortKey === k ? (sortDesc ? ", descending" : ", ascending") : ""}`}
+        // The th carries aria-sort (set at the call site); the button carries
+        // the action. aria-hidden on the icon keeps it out of the name.
       >
         {label}
         <ArrowUpDown size={12} aria-hidden />
       </button>
     );
+  }
+
+  function sortDirection(k: SortKey): "ascending" | "descending" | "none" {
+    if (sortKey !== k) return "none";
+    return sortDesc ? "descending" : "ascending";
   }
 
   const autoEligibleCount = React.useMemo(() => rows.filter((r) => r.stpScore >= 85).length, [rows]);
@@ -100,6 +127,20 @@ export default function ExceptionsPage() {
 
   return (
     <div className="space-y-4">
+      {loadFailed ? (
+        <GlassCard>
+          <p className="text-sm font-semibold">Queue did not load.</p>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            The failure list is unavailable — this is not an empty queue.
+          </p>
+          <button
+            onClick={retry}
+            className="min-touch mt-3 rounded-full border border-[var(--border)] px-4 text-sm font-semibold"
+          >
+            Retry
+          </button>
+        </GlassCard>
+      ) : null}
       <GlassCard className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-52 flex-1">
           <Search size={15} aria-hidden className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]" />
@@ -183,12 +224,12 @@ export default function ExceptionsPage() {
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead>
             <tr className="text-xs uppercase tracking-wider text-[var(--muted-foreground)]">
-              <th className="px-3 py-2"><SortHeader label="Student" k="studentName" /></th>
-              <th className="px-3 py-2"><SortHeader label="Scheme" k="scheme" /></th>
-              <th className="px-3 py-2"><SortHeader label="Stage" k="stage" /></th>
-              <th className="px-3 py-2"><SortHeader label="SLA" k="slaElapsedDays" /></th>
-              <th className="px-3 py-2"><SortHeader label="Risk" k="riskScore" /></th>
-              <th className="px-3 py-2"><SortHeader label="STP" k="stpScore" /></th>
+              <th scope="col" aria-sort={sortDirection("studentName")} className="px-3 py-2"><SortHeader label="Student" k="studentName" /></th>
+              <th scope="col" aria-sort={sortDirection("scheme")} className="px-3 py-2"><SortHeader label="Scheme" k="scheme" /></th>
+              <th scope="col" aria-sort={sortDirection("stage")} className="px-3 py-2"><SortHeader label="Stage" k="stage" /></th>
+              <th scope="col" aria-sort={sortDirection("slaElapsedDays")} className="px-3 py-2"><SortHeader label="SLA" k="slaElapsedDays" /></th>
+              <th scope="col" aria-sort={sortDirection("riskScore")} className="px-3 py-2"><SortHeader label="Risk" k="riskScore" /></th>
+              <th scope="col" aria-sort={sortDirection("stpScore")} className="px-3 py-2"><SortHeader label="STP" k="stpScore" /></th>
             </tr>
           </thead>
           <tbody>
@@ -199,7 +240,18 @@ export default function ExceptionsPage() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.03 }}
                 onClick={() => setSelected(r)}
-                className="cursor-pointer border-t border-[var(--border)] transition-colors hover:bg-[#6366F1]/5"
+                // Rows open the detail sheet: keyboard users get the same path
+                // via Tab + Enter, announced with the same words as the mobile
+                // card variant.
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setSelected(r);
+                  }
+                }}
+                aria-label={`${r.studentName}, ${r.scheme}, open file detail`}
+                className="cursor-pointer border-t border-[var(--border)] transition-colors hover:bg-[#6366F1]/5 focus-visible:outline-2"
               >
                 <td className="px-3 py-2.5">
                   <span className="block font-semibold">{r.studentName}</span>

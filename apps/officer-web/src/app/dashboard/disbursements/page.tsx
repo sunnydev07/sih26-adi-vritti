@@ -26,12 +26,47 @@ const FailureChart = dynamic(
 export default function DisbursementsPage() {
   const [data, setData] = React.useState<Awaited<ReturnType<typeof api.getDisbursements>> | null>(null);
   const [filter, setFilter] = React.useState("All");
+  const [failed, setFailed] = React.useState(false);
 
-  React.useEffect(() => {
-    api.getDisbursements().then(setData);
+  const load = React.useCallback(() => {
+    api.getDisbursements().then(setData, () => setFailed(true));
   }, []);
 
-  if (!data) return <p className="py-10 text-center text-sm text-[var(--muted-foreground)]">Loading disbursements…</p>;
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  function retry() {
+    setFailed(false);
+    setData(null);
+    load();
+  }
+
+  if (failed) {
+    return (
+      <GlassCard>
+        <p className="text-sm font-semibold">Payments did not load.</p>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Money figures are withheld rather than guessed — retry to load them.
+        </p>
+        <button
+          onClick={retry}
+          className="min-touch mt-3 rounded-full border border-[var(--border)] px-4 text-sm font-semibold"
+        >
+          Retry
+        </button>
+      </GlassCard>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="grid gap-4 sm:grid-cols-2" aria-label="Loading disbursements">
+        <Skeleton className="h-32" />
+        <Skeleton className="h-32" />
+      </div>
+    );
+  }
 
   const rows = data.records.filter((r) => filter === "All" || r.status === filter.toLowerCase());
 

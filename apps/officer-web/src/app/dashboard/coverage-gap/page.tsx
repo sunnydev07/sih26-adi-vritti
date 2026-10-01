@@ -22,17 +22,37 @@ export default function CoverageGapPage() {
   const [children, setChildren] = React.useState<CoverageRegion[]>([]);
   const [outreach, setOutreach] = React.useState<Awaited<ReturnType<typeof api.getOutreachList>>>([]);
   const [loading, setLoading] = React.useState(true);
+  const [failed, setFailed] = React.useState(false);
 
   const parentId = trail.length === 0 ? null : trail[trail.length - 1].id;
 
-  React.useEffect(() => {
-    setLoading(true);
-    Promise.all([api.getCoverageChildren(parentId), api.getOutreachList()]).then(([c, o]) => {
-      setChildren(c);
-      setOutreach(o);
-      setLoading(false);
-    });
+  const load = React.useCallback(() => {
+    // No synchronous setState in this path (see overview page): the loading
+    // flag is raised by the navigation handlers below, which are events.
+    Promise.all([api.getCoverageChildren(parentId), api.getOutreachList()]).then(
+      ([c, o]) => {
+        setChildren(c);
+        setOutreach(o);
+        setLoading(false);
+      },
+      () => {
+        setLoading(false);
+        setFailed(true);
+      }
+    );
   }, [parentId]);
+
+  React.useEffect(() => {
+    load();
+  }, [load]);
+
+  function navigate(next: CoverageRegion[]) {
+    // Event handler, so raising the flags here is lint-clean — and it keeps
+    // the skeleton honest when drilling between cached levels too.
+    setLoading(true);
+    setFailed(false);
+    setTrail(next);
+  }
 
   const level: CoverageRegion["level"] =
     children[0]?.level ?? (trail.length === 0 ? "state" : "school");
@@ -42,11 +62,13 @@ export default function CoverageGapPage() {
       toast(`Demo: ${region.name} outreach drafted locally — nothing sent.`);
       return;
     }
-    setTrail((t) => [...t, region]);
+    navigate([...trail, region]);
   }
 
   function exportCsv() {
-    const rows = ["school,district,class,st_students,applications", ...outreach.map((o) => `"${o.schoolName}","${o.district}","${o.classLevel}",${o.stStudents},${o.applications}`)];
+    // The rows are synthetic (demo console): mark the file itself, so a
+    // forwarded CSV cannot be mistaken for an official extract.
+    const rows = ["# Adi-Vritti coverage-gap outreach — DEMO DATA, synthetic figures, not official", "school,district,class,st_students,applications", ...outreach.map((o) => `"${o.schoolName}","${o.district}","${o.classLevel}",${o.stStudents},${o.applications}`)];
     const blob = new Blob([rows.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -54,7 +76,7 @@ export default function CoverageGapPage() {
     a.download = "coverage-gap-outreach.csv";
     a.click();
     URL.revokeObjectURL(url);
-    toast("Outreach list exported to CSV");
+    toast("Demo outreach list exported — synthetic figures, not official.");
   }
 
   return (
@@ -62,14 +84,14 @@ export default function CoverageGapPage() {
       <div className="space-y-4 lg:col-span-2">
         <GlassCard>
           <nav aria-label="Breadcrumb" className="mb-3 flex flex-wrap items-center gap-1 text-sm">
-            <button onClick={() => setTrail([])} className="font-medium text-[#4338CA] hover:underline">
+            <button onClick={() => navigate([])} className="font-medium text-[#4338CA] hover:underline">
               India
             </button>
             {trail.map((t, i) => (
               <span key={t.id} className="flex items-center gap-1">
                 <ChevronRight size={14} aria-hidden className="text-[var(--muted-foreground)]" />
                 <button
-                  onClick={() => setTrail(trail.slice(0, i + 1))}
+                  onClick={() => navigate(trail.slice(0, i + 1))}
                   className="font-medium text-[#4338CA] hover:underline"
                 >
                   {t.name}
@@ -80,6 +102,19 @@ export default function CoverageGapPage() {
           <h2 className="font-display text-base font-bold">{LEVEL_LABEL[level]} · tap to drill down</h2>
           {loading ? (
             <p className="py-8 text-center text-sm text-[var(--muted-foreground)]">Loading regions…</p>
+          ) : failed ? (
+            <div className="py-6 text-center">
+              <p className="text-sm font-semibold">Coverage map did not load.</p>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                No regional figures are shown rather than partial ones.
+              </p>
+              <button
+                onClick={() => navigate(trail)}
+                className="min-touch mt-3 rounded-full border border-[var(--border)] px-4 text-sm font-semibold"
+              >
+                Retry
+              </button>
+            </div>
           ) : (
             <div id="coverage-regions" className="mt-3 grid scroll-mt-24 gap-3 sm:grid-cols-2">
               {children.map((r, i) => {

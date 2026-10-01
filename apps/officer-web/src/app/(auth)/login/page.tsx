@@ -47,7 +47,11 @@ export default function LoginPage() {
    */
   async function verify(e: React.FormEvent) {
     e.preventDefault();
-    if (otp.trim().length < 4) return;
+    await doVerify();
+  }
+
+  async function doVerify() {
+    if (otp.trim().length < 4 || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -70,6 +74,15 @@ export default function LoginPage() {
       setBusy(false);
     }
   }
+
+  // Six digits is a complete OTP: submit without making the officer hunt for
+  // the button. Shorter codes still go through the button path above.
+  React.useEffect(() => {
+    if (step === "otp" && otp.replace(/\D/g, "").length === 6 && !busy) {
+      void doVerify();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otp, step]);
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
@@ -108,9 +121,11 @@ export default function LoginPage() {
               <Input
                 id="otp"
                 inputMode="numeric"
+                autoComplete="one-time-code"
                 placeholder="6-digit OTP"
                 value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                maxLength={6}
                 className="border-white/25 text-center font-mono text-lg tracking-[0.4em] text-white placeholder:text-indigo-100/50"
                 required
               />

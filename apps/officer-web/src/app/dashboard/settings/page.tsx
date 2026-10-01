@@ -1,15 +1,18 @@
 "use client";
 
+import { useTheme } from "next-themes";
 import Link from "next/link";
 import * as React from "react";
 import { GlassCard } from "@/components/effects/premium";
 import { Badge } from "@/components/ui/badge";
 import { Switch, toast } from "@/components/ui/controls";
 import { Separator } from "@/components/ui/primitives";
+import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
   const [dense, setDense] = React.useState(false);
   const [slaAlerts, setSlaAlerts] = React.useState(true);
+  const { theme, setTheme } = useTheme();
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -23,6 +26,24 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between gap-3">
             <span>Dense tables</span>
             <Switch checked={dense} onChange={setDense} label="Dense tables" />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span id="theme-label">Appearance</span>
+            <div className="flex gap-1" role="group" aria-labelledby="theme-label">
+              {(["light", "system", "dark"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTheme(t)}
+                  aria-pressed={theme === t}
+                  className={cn(
+                    "min-touch rounded-full px-3 text-xs font-semibold capitalize",
+                    theme === t ? "bg-[var(--primary)] text-white" : "border border-[var(--border)]"
+                  )}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
         <Separator className="my-4" />
@@ -44,9 +65,12 @@ export default function SettingsPage() {
       </GlassCard>
       <GlassCard>
         <h2 className="font-display text-base font-bold">Integration readiness</h2>
+        {/* No "live" row exists: every government system behind this console is
+            govsim. The README and demo-path say contract-ready; this table must
+            not say otherwise. */}
         <ul className="mt-3 space-y-2 text-sm">
-          <li className="flex items-center justify-between">DigiLocker (API Setu sandbox) <Badge variant="verified">live</Badge></li>
-          <li className="flex items-center justify-between">Bhashini ASR / NMT / TTS <Badge variant="verified">live</Badge></li>
+          <li className="flex items-center justify-between">DigiLocker (govsim proxy) <Badge variant="pending">contract-ready</Badge></li>
+          <li className="flex items-center justify-between">Bhashini ASR / NMT / TTS <Badge variant="pending">contract-ready</Badge></li>
           <li className="flex items-center justify-between">NSP / SFMP / NOS adapters <Badge variant="pending">contract-ready</Badge></li>
           <li className="flex items-center justify-between">PFMS / DBT failure taxonomy <Badge variant="pending">contract-ready</Badge></li>
           <li className="flex items-center justify-between">UDISE+ / APAAR hashed join <Badge variant="review">pilot</Badge></li>

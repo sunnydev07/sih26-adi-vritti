@@ -16,7 +16,6 @@ import {
   SectionTitle,
   Skeleton,
   Tx,
-  inDate,
   ink2,
   shadow,
 } from "@/components/ui";
@@ -58,7 +57,6 @@ export default function StudentDashboardScreen() {
   const [showSchemes, setShowSchemes] = useState(false);
   const [showActions, setShowActions] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [syncedAt, setSyncedAt] = useState(d.lastSyncAt);
   const greet = greetingFor(new Date());
 
   useEffect(() => {
@@ -76,9 +74,10 @@ export default function StudentDashboardScreen() {
   const featured = eligible[0] ?? null;
 
   function onRefresh() {
+    // Demo seam: there is no sync endpoint behind this screen, so a refresh
+    // only re-renders the staged preview. It must not stamp a sync time.
     setRefreshing(true);
     setTimeout(() => {
-      setSyncedAt(new Date().toISOString());
       setRefreshing(false);
     }, 1100);
   }
@@ -88,7 +87,7 @@ export default function StudentDashboardScreen() {
       <ScreenHeader
         eyebrow="Adi-Vritti · Student"
         title={`${greet}, ${d.greetingName}`}
-        subtitle={d.offline ? "Offline — showing cached data" : `Last sync ${inDate(syncedAt)}`}
+        subtitle={d.offline ? "Offline — showing cached data" : "Demo preview — not synced yet"}
         avatar={d.greetingName.slice(0, 1)}
       />
       <ScrollView

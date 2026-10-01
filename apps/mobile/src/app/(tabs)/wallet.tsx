@@ -62,10 +62,11 @@ export default function WalletScreen() {
               <Ionicons name="checkmark-circle" size={24} color="#047857" />
               <View style={{ flex: 1 }}>
                 <Tx variant="body" weight="extrabold" color="#047857">
-                  DigiLocker connected
+                  DigiLocker staged (demo)
                 </Tx>
                 <Tx variant="caption" color="#047857">
-                  Fresh copies will land here automatically
+                  Staged locally only — documents will not actually refresh. In
+                  integration this links DigiLocker via POST /v1/verify.
                 </Tx>
               </View>
             </Card>

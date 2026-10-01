@@ -31,11 +31,44 @@ type Recent = Awaited<ReturnType<typeof api.getRecentExceptions>>;
 export default function OverviewPage() {
   const [metrics, setMetrics] = React.useState<DashboardMetrics | null>(null);
   const [recent, setRecent] = React.useState<Recent>([]);
+  // A rejected load must not leave the skeleton up forever. Today the seam
+  // serves mocks and cannot reject; this guards the live wiring to come.
+  const [failed, setFailed] = React.useState(false);
+
+  const load = React.useCallback(() => {
+    // No synchronous setState here: react-hooks/set-state-in-effect forbids
+    // it, and the initial useState values already describe the loading state.
+    // Resets live in the Retry handler below, which is an event, not an effect.
+    api.getDashboardMetrics().then(setMetrics, () => setFailed(true));
+    api.getRecentExceptions().then(setRecent, () => setFailed(true));
+  }, []);
 
   React.useEffect(() => {
-    api.getDashboardMetrics().then(setMetrics);
-    api.getRecentExceptions().then(setRecent);
-  }, []);
+    load();
+  }, [load]);
+
+  function retry() {
+    setFailed(false);
+    setMetrics(null);
+    load();
+  }
+
+  if (failed) {
+    return (
+      <GlassCard>
+        <p className="text-sm font-semibold">Overview did not load.</p>
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+          Check the connection and try again — no figures are shown rather than stale ones.
+        </p>
+        <button
+          onClick={retry}
+          className="min-touch mt-3 rounded-full border border-[var(--border)] px-4 text-sm font-semibold"
+        >
+          Retry
+        </button>
+      </GlassCard>
+    );
+  }
 
   if (!metrics) {
     return (

@@ -13,22 +13,41 @@ import type { IdentityCase } from "@/types";
 export default function IdentityPage() {
   const [queue, setQueue] = React.useState<IdentityCase[]>([]);
   const [activeId, setActiveId] = React.useState<string | null>(null);
-  const [resolved, setResolved] = React.useState(23);
-  const [confirm, setConfirm] = React.useState<"merge" | "reject" | null>(null);
+  // Decisions made on this screen only. Starts at 0: the old hardcoded 23
+  // presented an invented figure as a scoreboard. Nothing here writes back —
+  // Core has no /v1/admin/identity-queue or adjudication endpoint — so the
+  // count resets on reload and says so.
+  const [resolved, setResolved] = React.useState(0);
+  // A rejected queue load must not render "Queue clear" — failure is not an
+  // empty queue.
+  const [loadFailed, setLoadFailed] = React.useState(false);
+
+  const load = React.useCallback(() => {
+    api.getIdentityQueue().then(
+      (q) => {
+        setQueue(q);
+        setActiveId(q[0]?.id ?? null);
+      },
+      () => setLoadFailed(true)
+    );
+  }, []);
 
   React.useEffect(() => {
-    api.getIdentityQueue().then((q) => {
-      setQueue(q);
-      setActiveId(q[0]?.id ?? null);
-    });
-  }, []);
+    load();
+  }, [load]);
+
+  function retry() {
+    setLoadFailed(false);
+    load();
+  }
+  const [confirm, setConfirm] = React.useState<"merge" | "reject" | null>(null);
 
   const active = queue.find((c) => c.id === activeId) ?? null;
 
   function decide(kind: "merge" | "reject" | "info") {
     if (!active) return;
     if (kind === "info") {
-      toast(`${active.id} moved to need-more-info sub-queue`);
+      toast(`Demo: ${active.id} staged for need-more-info — nothing sent (demo console).`);
       return;
     }
     setQueue((q) => q.filter((c) => c.id !== active.id));
@@ -38,15 +57,29 @@ export default function IdentityPage() {
       return rest[0]?.id ?? null;
     });
     setConfirm(null);
-    toast(kind === "merge" ? `${active.id} merged — one USID kept` : `${active.id} kept as two people`);
+    toast(kind === "merge" ? `Demo: ${active.id} staged as merged — no USID was linked (demo console).` : `Demo: ${active.id} staged as separate — nothing recorded (demo console).`);
   }
 
   return (
     <div className="grid gap-4 lg:grid-cols-5">
       <div className="space-y-3 lg:col-span-2">
         <p className="text-sm text-[var(--muted-foreground)]">
-          Sorted by confidence — most uncertain first. Resolved today: <strong className="text-[var(--foreground)]">{resolved}</strong>
+          Sorted by confidence — most uncertain first. Decided this session (demo, not recorded): <strong className="text-[var(--foreground)]">{resolved}</strong>
         </p>
+        {loadFailed ? (
+          <GlassCard>
+            <p className="text-sm font-semibold">Identity queue did not load.</p>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              No cases are shown — this is not a clear queue.
+            </p>
+            <button
+              onClick={retry}
+              className="min-touch mt-3 rounded-full border border-[var(--border)] px-4 text-sm font-semibold"
+            >
+              Retry
+            </button>
+          </GlassCard>
+        ) : null}
         {queue.map((c, i) => (
           <motion.button
             key={c.id}
@@ -121,8 +154,8 @@ export default function IdentityPage() {
       >
         <p className="text-[var(--muted-foreground)]">
           {confirm === "merge"
-            ? "Both system links will point at a single USID with full provenance. This feeds back as a training signal."
-            : "Both records keep separate USIDs and leave the queue with your reason recorded."}
+            ? "Demo only: no links change and no training signal is sent. In integration both system links point at a single USID with full provenance."
+            : "Demo only: nothing is recorded. In integration both records keep separate USIDs with your reason recorded."}
         </p>
       </Dialog>
     </div>
