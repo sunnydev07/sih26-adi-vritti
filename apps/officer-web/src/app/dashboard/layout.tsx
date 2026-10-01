@@ -8,6 +8,7 @@ import { BottomNav } from "@/components/dashboard/bottomnav";
 import { DemoTour } from "@/components/demo/DemoTour";
 import { Header } from "@/components/dashboard/header";
 import { Sidebar } from "@/components/dashboard/sidebar";
+import { DATA_SOURCE } from "@/lib/api";
 
 const TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard": { title: "Overview", subtitle: "STP scores, queue counts and disbursement health at a glance" },
@@ -26,6 +27,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header title={meta.title} subtitle={meta.subtitle} />
+        {DATA_SOURCE.demo && (
+          <div
+            role="status"
+            className="mx-4 mt-3 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-[11px] text-amber-100 lg:mx-8"
+          >
+            Demo data — these figures are synthetic, not live records.
+          </div>
+        )}
         <AnimatePresence mode="wait">
           <motion.main
             key={pathname}
