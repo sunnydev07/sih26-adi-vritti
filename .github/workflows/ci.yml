@@ -117,6 +117,19 @@ jobs:
       - run: python -m pytest tests/ -q
         working-directory: services/ai
 
+  officer-web:
+    # The console's session guard (HS256 signature + expiry, src/lib/session.ts)
+    # is security-critical and has no Java or Python behind it, so it gets its own
+    # job. node --test needs no runner installed and no build step.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test tests/*.test.mjs
+        working-directory: apps/officer-web
+
   api-client:
     # The generated client is gitignored by design (regenerable artifact), so
     # this job proves the contract is generatable and the output compiles.

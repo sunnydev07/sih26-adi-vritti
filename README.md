@@ -55,6 +55,7 @@ make dev-detach # same, detached
 make seed       # load deterministic synthetic data (seed 26238)
 make test-core  # Java unit tests (Gradle wrapper, JDK 21)
 make test-ai    # Python unit tests (see the dev-extra note below)
+make test-web   # officer console session tests (node --test, no runner to install)
 make api        # regenerate API clients from the OpenAPI contract
 ```
 
@@ -116,6 +117,16 @@ is safe to re-run.
 ## Deployment
 
 - **Officer web** → Vercel, auto-deploys from `main` (root directory `apps/officer-web`).
+  Set `OFFICER_SESSION_SECRET` (32+ random bytes, e.g.
+  `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`)
+  and `AI_SERVICE_TOKEN` in the Vercel project. **Without a session secret the
+  console is unreachable on purpose**: no session is minted and every cookie is
+  rejected, rather than a cookie anyone can set. The guard in `src/proxy.ts`
+  verifies an HS256 signature and an 8-hour expiry, not merely that a cookie
+  exists. This is a *console session*, not an officer credential — it authorises
+  nothing on Core, which re-checks its own JWT on every API call. It is still not
+  an IdP: a real deployment should put the console behind Core auth, which does
+  not exist yet (`/v1/auth/officer/login` is not implemented).
 - **Backend** → run on a real Docker host, but **not** by pointing it at
   `infra/docker-compose.yml` as-is. That file is a development stack: committed
   dev secrets and `SPRING_PROFILES_ACTIVE=dev`, which leaves the whole Core API
@@ -123,6 +134,12 @@ is safe to re-run.
   `SPRING_PROFILES_ACTIVE=prod` and supply real values for
   `AADHAAR_VAULT_HMAC_KEY`, `CLAIM_VAULT_KEY`, `JWT_HMAC_SECRET`,
   `GAP_HMAC_SALT`, `AI_SERVICE_TOKEN` and `POSTGRES_PASSWORD`.
+
+  The `prod` profile now **refuses to start** while any of those still holds the
+  value committed to the repository, or while `ALLOW_INSECURE_DEV=true`. Both
+  services fail at boot with a message naming the offending variable, instead of
+  coming up and serving. The AI service also rejects a misspelled configuration
+  variable rather than silently keeping its default.
 - **Mobile** → Expo EAS builds.
 
 ## Integration readiness

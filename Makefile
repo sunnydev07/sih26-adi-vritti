@@ -14,14 +14,14 @@ COMPOSE_FILES = -f infra/docker-compose.yml
 #   make test-core JAVA_VERSION=23
 JAVA_VERSION ?= 21
 
-.PHONY: help dev dev-detach down logs rebuild seed api test test-core test-ai e2e ps clean init-db docker-compose-config
+.PHONY: help dev dev-detach down logs rebuild seed api test test-core test-ai test-web e2e ps clean init-db docker-compose-config
 
 help:
 	@echo "make dev        - build and start the whole stack in the foreground"
 	@echo "make dev-detach - same, but detached (use this for init-db / scripted checks)"
 	@echo "make down       - stop the stack"
 	@echo "make logs       - tail logs from every service"
-	@echo "make test       - run core + ai test suites"
+	@echo "make test       - run core + ai + officer-web test suites"
 	@echo "make seed       - regenerate synthetic demo data AND load it into postgres"
 	@echo "make api        - regenerate the API client from docs/openapi/core.yaml"
 	@echo "make init-db    - apply the DB extensions to a RUNNING database (see infra/init-db.sql)"
@@ -56,6 +56,8 @@ rebuild:
 test-core:
 	cd services/core && ./gradlew test -PjavaToolchainVersion=$(JAVA_VERSION)
 
+test: test-core test-ai test-web
+
 # pyproject.toml deliberately keeps pytest in the `dev` extra instead of the
 # runtime dependencies, so a plain `pip install -e .` yields an environment with
 # no pytest at all. One-time setup:  pip install -e '.[dev]'
@@ -63,7 +65,11 @@ test-ai:
 	@echo "note: run 'pip install -e .[dev]' in services/ai once, or pytest is missing"
 	cd services/ai && python3 -m pytest tests/ -v
 
-test: test-core test-ai
+# The officer console's session guard is the one piece of security-critical code
+# that lives in this repo with no Java or Python behind it, so it gets its own
+# suite: node --test needs no runner installed and no build step.
+test-web:
+	cd apps/officer-web && node --test tests/*.test.mjs
 
 # The previous target called `./gradlew e2eTest`, which is not a task that exists
 # in build.gradle, so it always failed with "Task 'e2eTest' not found". There is

@@ -36,7 +36,9 @@ school, so Core has no denominator and says so rather than inventing one.
 `GET /v1/admin/exceptions` → rows carry a computed `stp_score` (0–100, heuristic:
 stage base − SLA risk − open deficiency) and sort by `breach_risk` descending.
 There is **no approve endpoint** — the officer console renders demo data and labels
-it as such.
+it as such. Its `/dashboard` is behind a signed session cookie
+(`OFFICER_SESSION_SECRET`, HS256, 8h); in development the login page offers a
+one-click demo entry, and a tampered or expired cookie redirects to `/login`.
 
 ## Beat 6 (30s) — Integration-readiness matrix
 | Integration | Status |

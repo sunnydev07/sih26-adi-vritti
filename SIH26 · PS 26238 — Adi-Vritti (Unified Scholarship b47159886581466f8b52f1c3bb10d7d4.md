@@ -1,4 +1,4 @@
-# SIH26 · PS 26238 — Adi-Vritti (Unified Scholarship App for Tribal Students)
+cd# SIH26 · PS 26238 — Adi-Vritti (Unified Scholarship App for Tribal Students)
 
 <aside>
 🎯

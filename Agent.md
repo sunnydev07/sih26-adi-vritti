@@ -24,7 +24,9 @@ schemes and three portals. Read docs/specs/00-overview.md before any task.
 
 ## Commands
 - Boot everything: make dev
-- Core tests: make test-core   AI tests: make test-ai   E2E: make e2e
+- Core tests: make test-core   AI tests: make test-ai
+  Officer console: make test-web
+  E2E: make e2e
 - Regenerate clients after a contract change: make api
 - Reseed synthetic data: make seed
 
