@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class MatchRecord(BaseModel):
@@ -62,6 +62,62 @@ class DocParseResponse(BaseModel):
     parsed_at: datetime
 
 
+#: The claim types the contract's ``VerifyRequest.claim_type`` enum allows
+#: (docs/openapi/core.yaml). /docai/parse echoes this value straight into the
+#: response body and into the extraction dispatch, so it is a ``Literal`` here
+#: too: an arbitrary string used to be persisted verbatim as
+#: ``fields.claim_type``, which is unbounded storage under a caller's control
+#: and a second, unchecked path into the extractor.
+ClaimType = Literal[
+    "identity",
+    "st_status",
+    "income",
+    "domicile",
+    "academic",
+    "enrolment",
+    "institution",
+    "net_jrf",
+    "disability",
+    "bank_account",
+]
+
+
+class DbtExplainRequest(BaseModel):
+    """Bounded body for /decisions/dbt-explain.
+
+    This used to be a bare ``dict[str, Any]``, which meant ``failure_code`` and
+    ``details`` were whatever the caller sent: an arbitrary-length string was
+    interpolated into the Groq prompt verbatim and a nested structure of any
+    shape was stringified into it. Both are a prompt-injection surface and a
+    token-cost amplifier, and an over-long body became a 500 from Groq rather
+    than a 422 from the boundary that should have rejected it.
+    """
+
+    failure_code: str = Field(
+        default="E006_OTHER", min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_]+$"
+    )
+    lang: str = Field(default="hi", min_length=2, max_length=16, pattern=r"^[a-zA-Z-]+$")
+    # A failure's context is a handful of short scalar facts (bank last4, a
+    # timestamp, a gateway message). Nested objects are not part of that shape,
+    # so only scalars are accepted; each one is length-bounded.
+    details: dict[str, str | int | float | bool | None] = Field(
+        default_factory=dict,
+        max_length=32,
+    )
+
+    @field_validator("details")
+    @classmethod
+    def _bound_detail_values(cls, v: dict[str, str | int | float | bool | None]) -> dict:
+        for key, value in v.items():
+            if not isinstance(key, str) or len(key) > 64:
+                raise ValueError("each detail key must be a string of at most 64 characters")
+            if isinstance(value, str) and len(value) > 500:
+                raise ValueError(
+                    f"detail '{key}' is {len(value)} characters; the limit is 500"
+                )
+        return v
+
+
 class JevDecisionRequest(BaseModel):
     state: dict[str, Any]
     questions: dict[str, Any]
@@ -84,6 +140,12 @@ class StpScoreResponse(BaseModel):
     risk_level: int
     routing: str
     latency_ms: float
+    # True when the verdict came from the deterministic rule engine because the
+    # model was unavailable or over quota. The service already computed this and
+    # the route dropped it, so the officer console's "JEV 1.13 Free (Live)" label
+    # was applied to a rule-based verdict — the same mislabelling task 3.2 fixed
+    # inside jev_service, one layer out.
+    fallback: bool
 
 
 class JagoIntentRequest(BaseModel):

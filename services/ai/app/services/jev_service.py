@@ -234,9 +234,16 @@ async def classify_jago_intent(user_message: str, lang: str = "hi") -> dict[str,
         confidence = scored[best_intent]
 
         if confidence < 0.40:
+            # JEV answered, but not with anything we can use. The verdict is
+            # still a *fallback* — it came from _fallback_intent, not from the
+            # model. This used to overwrite the flag with False, which labelled
+            # a keyword guess as a live model decision in every UI and audit
+            # record that reads it. Latency is the model's real round-trip and
+            # stays as measured; the flag describes provenance, not speed.
             fb = _fallback_intent(user_message)
             fb["latency_ms"] = latency
-            fb["fallback"] = False
+            fb["fallback"] = True
+            fb["fallback_reason"] = "low_confidence"
             return fb
 
         needs_usid = best_intent in ("why_is_payment_pending", "check_eligibility")

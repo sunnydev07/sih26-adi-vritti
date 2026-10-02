@@ -5,6 +5,13 @@ text cannot establish that a certificate is genuine, so it reports *format* sign
 and a self-assessed extraction confidence, and the caller (Core's
 DocAiStrategy) decides how much weight that can carry. Issuing a high confidence
 for an unrecognised issuer is exactly the fabrication this is meant to avoid.
+
+PII note: the extracted-document text is never returned. A residency certificate
+carries a name, a date of birth, a father's name and a full address, and this
+function used to put the first 2 000 characters of it into the ``fields`` dict,
+which is the HTTP response body of /docai/parse. Callers get the extracted
+fields and the tamper signals; the raw text stays in this process. If a
+downstream consumer genuinely needs it, it reads the document it uploaded.
 """
 
 from __future__ import annotations
@@ -168,7 +175,6 @@ def parse_document(text: str, claim_type: str) -> dict:
     analysed = text[:MAX_ANALYSIS_CHARS]
     fields = _extract(analysed)
     fields["claim_type"] = claim_type
-    fields["raw_text"] = text[:2000]
     if len(text) > MAX_ANALYSIS_CHARS:
         fields["analysis_truncated"] = True
 
@@ -177,7 +183,7 @@ def parse_document(text: str, claim_type: str) -> dict:
         signals.append("issuer_format_unrecognized")
     if len(normalised) < MIN_USABLE_CHARS:
         signals.append("insufficient_text")
-    if not fields.keys() - {"claim_type", "raw_text"}:
+    if not fields.keys() - {"claim_type", "analysis_truncated"}:
         signals.append("no_fields_extracted")
 
     # Confidence reflects extraction quality, not authenticity. With nothing

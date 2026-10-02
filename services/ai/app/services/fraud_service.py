@@ -129,6 +129,14 @@ async def screen_application(application: dict[str, Any]) -> dict[str, Any]:
             "latency_ms": latency,
             "fallback": False,
         }
-    except Exception as exc:
+    except jev_service.JevUnavailableError as exc:
+        # Narrow on purpose. This used to be `except Exception`, which also
+        # caught KeyboardInterrupt and SystemExit, so Ctrl-C during an
+        # in-flight screen and a shutdown request both came back as a cheerful
+        # rule-based verdict with `fallback` implied — an operator stopping the
+        # container saw log traffic that looked like normal screening. httpx
+        # errors stay unexpected (a bug in this module, a malformed response)
+        # and are allowed to surface; the *only* condition the fallback exists
+        # for is JEV being unreachable.
         logger.warning("JEV fraud screening fallback triggered: %s", exc)
         return base

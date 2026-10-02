@@ -214,6 +214,12 @@ def retrieve_clauses(question: str, scheme: str | None = None, top_k: int = 4) -
     """Retrieve the most relevant guideline clauses using keyword & scheme filtering."""
     q_lower = question.lower()
     tokens = set(re.findall(r"\w+", q_lower))
+    # Pre-compiled once per query. The previous scoring used `t in item_text`,
+    # a bare substring test, so the token "or" matched "foreign", "category",
+    # "score" and most of the corpus; a two-character word was worth the same
+    # two points as "income". Matching whole words only makes the score mean
+    # something: the token has to actually appear as a word in the clause.
+    token_res = [re.compile(r"\b" + re.escape(t) + r"\b") for t in tokens]
 
     scored_clauses = []
     for item in GUIDELINE_CLAUSES:
@@ -222,7 +228,7 @@ def retrieve_clauses(question: str, scheme: str | None = None, top_k: int = 4) -
             continue
 
         item_text = f"{item['scheme']} {item['scheme_name']} {item['clause']} {item['content']}".lower()
-        score = sum(2 for t in tokens if t in item_text)
+        score = sum(2 for rx in token_res if rx.search(item_text))
 
         # Bonus for exact keywords
         if any(w in q_lower for w in ["income", "ceiling", "2,50,000", "2.5", "6,00,000", "paisa"]) and "income" in item["clause"].lower():

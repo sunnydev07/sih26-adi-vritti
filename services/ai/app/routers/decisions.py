@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.models.schemas import (
     ChatCompletionRequest,
     ChatCompletionResponse,
+    DbtExplainRequest,
     FraudScreenRequest,
     FraudScreenResponse,
     JagoIntentRequest,
@@ -37,6 +36,10 @@ async def score_stp(
         risk_level=result["risk_level"],
         routing=result["routing"],
         latency_ms=result.get("latency_ms", 0.0),
+        # Carried through rather than dropped: without it the console cannot tell
+        # a live model verdict from the deterministic engine's, and labels both
+        # "(Live)".
+        fallback=result.get("fallback", False),
     )
 
 
@@ -105,15 +108,20 @@ async def chat(
 
 @router.post("/dbt-explain")
 async def explain_dbt(
-    payload: dict[str, Any],
+    payload: DbtExplainRequest,
     _: None = Depends(require_service_token),
 ) -> dict[str, str]:
-    """Generate empathetic action steps for a DBT payment failure."""
-    code = payload.get("failure_code", "E006_OTHER")
-    lang = payload.get("lang", "hi")
-    details = payload.get("details", {})
-    explanation = await groq_service.explain_dbt_failure(code, details, lang)
-    return {"failure_code": code, "explanation": explanation}
+    """Generate empathetic action steps for a DBT payment failure.
+
+    The body is a validated model, not ``dict[str, Any]``: every field is
+    length- and shape-bounded before it can reach the Groq prompt, so a caller
+    cannot inject instructions through ``failure_code`` or blow the context
+    budget through ``details``.
+    """
+    explanation = await groq_service.explain_dbt_failure(
+        payload.failure_code, payload.details, payload.lang
+    )
+    return {"failure_code": payload.failure_code, "explanation": explanation}
 
 
 @router.post("/fraud-screen", response_model=FraudScreenResponse)

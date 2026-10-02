@@ -18,6 +18,26 @@ logger = logging.getLogger(__name__)
 
 TIMEOUT_SECONDS = 10.0
 
+#: httpx exceptions carry the full request/response pair in their message, and
+#: a connection error against a real endpoint is routinely a multi-kilobyte
+#: blob of TLS details, proxy banners and response headers. That string was
+#: interpolated straight into ``GroqUnavailableError``, which the routers hand
+#: back as the ``detail`` field of a 503 — so a transient network blip in Groq's
+#: edge published the request headers (Authorization: Bearer gsk_…) to every
+#: caller. The message is now a bounded, control-character-free summary.
+_MAX_ERROR_CHARS = 160
+
+
+def _safe_error_summary(exc: BaseException) -> str:
+    """One short, single-line, credential-free line describing ``exc``."""
+    text = " ".join(str(exc).split())  # collapse newlines/spaces from tracebacks
+    if not text:
+        return type(exc).__name__
+    if len(text) > _MAX_ERROR_CHARS:
+        text = text[: _MAX_ERROR_CHARS - 1] + "…"
+    return text
+
+
 
 class GroqUnavailableError(RuntimeError):
     """Raised when Groq API is unreachable, times out, or returns an error."""
@@ -76,10 +96,18 @@ async def chat_completion(
             exc.response.text[:200],
         )
         raise GroqUnavailableError(f"Groq HTTP {exc.response.status_code}") from exc
-    except Exception as exc:
+    except httpx.RequestError as exc:
+        # Transport-level only (connect, read, timeout, pool). A malformed
+        # response body, a JSON decode failure or a bug in this module is NOT a
+        # reason to report "Groq is down" — those bubble up as 500s so the
+        # fault is visible instead of being laundered into a 503.
         elapsed = (time.perf_counter() - start) * 1000
-        logger.warning("Groq connection error in %.1fms: %s", elapsed, exc)
-        raise GroqUnavailableError(f"Groq connection error: {exc}") from exc
+        logger.warning(
+            "Groq transport error in %.1fms: %s", elapsed, _safe_error_summary(exc)
+        )
+        raise GroqUnavailableError(
+            f"Groq transport error: {type(exc).__name__}"
+        ) from exc
 
     elapsed = (time.perf_counter() - start) * 1000
     try:

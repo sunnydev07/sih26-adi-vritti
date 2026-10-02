@@ -101,10 +101,21 @@ def test_aadhaar_last4_is_extracted_when_labelled():
     assert out["fields"].get("aadhaar_last4") == "4821"
 
 
-def test_claim_type_is_echoed_and_raw_text_is_truncated():
+def test_claim_type_is_echoed_and_raw_text_is_not_returned():
     out = _parse("x" * 5000, claim_type="domicile")
     assert out["fields"]["claim_type"] == "domicile"
-    assert len(out["fields"]["raw_text"]) == 2000
+    # The uploaded document text carries name/dob/address. It is analysed here
+    # and never leaves the process, so it must not be in the response body.
+    assert "raw_text" not in out["fields"]
+    assert "x" * 200 not in repr(out)
+
+
+def test_uploaded_document_text_is_absent_from_the_response():
+    # A real-shaped payload, so this fails if the PII ever comes back.
+    pii = "Sita Devi 2008-04-11 father Ramesh village Kotagarh"
+    out = _parse(f"Government of India {pii} Certificate A/1")
+    assert pii not in repr(out)
+    assert "Sita" not in repr(out)
 
 
 # --- degenerate input ----------------------------------------------------------

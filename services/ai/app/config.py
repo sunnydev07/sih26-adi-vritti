@@ -37,12 +37,90 @@ protected route depends on them):
 
 from __future__ import annotations
 
+import logging
+import os
+from collections.abc import Mapping
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Placeholder that must never survive into a deployed environment.
 DEV_SALT = "dev-salt-rotate-in-prod"
 DEV_TOKEN = "dev-only-ai-service-token"
+
+PROD_BLOCK = "*** REFUSING TO START: prod environment with development secrets ***"
+
+#: Env vars that select the production posture. ``ENV`` is what the container
+#: image and the hosting platforms set; ``SPRING_PROFILES_ACTIVE`` is accepted
+#: because Core is a Spring service and a deployment that profiles one of them
+#: very often profiles the other the same way.
+_PROD_MARKERS = ("prod", "production")
+
+
+def _is_production() -> bool:
+    for var in ("ENV", "SPRING_PROFILES_ACTIVE"):
+        raw = os.getenv(var, "")
+        if any(marker == part.strip().lower() for marker in _PROD_MARKERS for part in raw.split(",")):
+            return True
+    return False
+
+
+#: A configuration name this close to a real field is a typo, not somebody
+#: else's variable. The test is deliberately narrow in *both* directions:
+#:
+#:   * a real field is a case-insensitive prefix of the variable (``GAP_HMAC_SALT``
+#:     vs ``GAP_HMAC_SALT_TYPO``), or
+#:   * the variable is a case-insensitive prefix of a real field
+#:     (``GAP_HMAC_SALT_TYP`` vs ``GAP_HMAC_SALT``).
+#:
+#: The first version of this check used a broad prefix list ("anything starting
+#: with AI_") and immediately failed on an unrelated ``AI_AGENT`` in the
+#: surrounding shell. A check that breaks on a variable it does not own is a
+#: check that gets switched off, which restores the silent-typo behaviour it
+#: exists to prevent. The 4-character floor keeps a two-letter fragment from
+#: matching everything.
+_MIN_TYPO_NAME_LENGTH = 4
+
+
+def _typo_candidates(fields: set[str], environ: Mapping[str, str] | None = None) -> list[str]:
+    """Environment variables that are near-misses of a real setting's name."""
+    env = os.environ if environ is None else environ
+    known = {name.lower() for name in fields}
+    suspicious: list[str] = []
+    for name in env:
+        lowered = name.lower()
+        if lowered in known:
+            continue
+        if len(lowered) < _MIN_TYPO_NAME_LENGTH:
+            continue
+        if any(field.startswith(lowered) or lowered.startswith(field) for field in known):
+            suspicious.append(name)
+    return sorted(suspicious)
+
+
+def _reject_unknown_env_vars() -> None:
+    """Fail fast on a misspelled configuration variable.
+
+    ``extra="forbid"`` only covers the dotenv file and explicit constructor
+    arguments -- pydantic-settings reads the OS environment by looking up the
+    fields it knows about, so an unknown name there is invisible. That is the
+    deployment path that matters: a container started with ``GAP_HMAC_SALT_TYPO``
+    silently kept the published development salt, ``/gap/hash`` answered 503, and
+    nothing in the logs said the deployment was the reason.
+
+    Not every typo is caught. ``GPA_HMAC_SALT`` shares no prefix with a real
+    field, so it passes; catching that needs an allowlist per deployment, which
+    is a different tool. What is caught is the common case: an extra or a
+    truncated suffix on a name that was otherwise right.
+    """
+    suspicious = _typo_candidates(set(Settings.model_fields))
+    if suspicious:
+        raise ValueError(
+            "Unrecognised configuration variable(s): "
+            f"{', '.join(suspicious)}. This service is configured entirely by "
+            f"environment variables, so an unknown name means the intended value "
+            f"was not applied."
+        )
 
 
 class Settings(BaseSettings):
@@ -85,13 +163,55 @@ class Settings(BaseSettings):
     @classmethod
     def _reject_known_dev_salt_in_production(cls, v: str) -> str:
         if v.strip() == DEV_SALT:
-            # Not fatal: `make dev` depends on the default. Loud enough that a
-            # deployment that forgot to set it is obvious in the logs.
-            import logging
-
+            if _is_production():
+                raise ValueError(
+                    f"{PROD_BLOCK} GAP_HMAC_SALT is still the published development value. "
+                    "Set a real rotated salt before running with ENV=prod."
+                )
             logging.getLogger("app.config").warning(
                 "GAP_HMAC_SALT is still the published development value. The coverage-gap "
                 "join is only privacy-preserving with a real, rotated salt."
+            )
+        return v
+
+    @field_validator("ai_service_token")
+    @classmethod
+    def _reject_known_dev_token_in_production(cls, v: str) -> str:
+        if v.strip() == DEV_TOKEN:
+            if _is_production():
+                raise ValueError(
+                    f"{PROD_BLOCK} AI_SERVICE_TOKEN is still the published development value. "
+                    "Set a real secret before running with ENV=prod."
+                )
+            logging.getLogger("app.config").warning(
+                "AI_SERVICE_TOKEN is still the published development value. Every route "
+                "except /health answers 503 until it is replaced (see app.security)."
+            )
+        return v
+
+    @field_validator("core_service_token")
+    @classmethod
+    def _reject_known_dev_token_as_core_credential(cls, v: str) -> str:
+        if v.strip() == DEV_TOKEN and _is_production():
+            raise ValueError(
+                f"{PROD_BLOCK} CORE_SERVICE_TOKEN cannot be the AI service token: Core "
+                "verifies a real signed JWT, and reusing one shared string for both "
+                "means a token leaked from either side authenticates against both."
+            )
+        return v
+
+    @field_validator("allow_insecure_dev")
+    @classmethod
+    def _refuse_insecure_dev_in_production(cls, v: bool) -> bool:
+        if v and _is_production():
+            raise ValueError(
+                f"{PROD_BLOCK} ALLOW_INSECURE_DEV=true re-opens /gap/hash, which takes a "
+                "raw Aadhaar reference, to anyone who can reach the port."
+            )
+        if v:
+            logging.getLogger("app.config").warning(
+                "ALLOW_INSECURE_DEV=true — the published dev service token is accepted. "
+                "Every protected route is open to anyone who has read this repository."
             )
         return v
 
@@ -102,7 +222,15 @@ class Settings(BaseSettings):
             raise ValueError("DOCAI_MAX_UPLOAD_BYTES must be positive")
         return min(v, 50 * 1024 * 1024)
 
-    model_config = SettingsConfigDict(env_prefix="", env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # `extra="forbid"` covers the dotenv file and any explicit constructor
+    # argument. For the OS environment -- the path a real deployment uses --
+    # `_reject_unknown_env_vars` does the same job, because pydantic-settings
+    # looks up only the fields it knows about and cannot notice a name it was
+    # never told to read.
+    model_config = SettingsConfigDict(
+        env_prefix="", env_file=".env", env_file_encoding="utf-8", extra="forbid"
+    )
 
 
 settings = Settings()
+_reject_unknown_env_vars()

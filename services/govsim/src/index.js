@@ -64,14 +64,38 @@ const decide = (usid, salt, passRate) =>
   usid === DEMO_STUDENT.usid || (stableHash(`${salt}:${usid}`) % 100) < Math.round(passRate * 100);
 
 // --- Chaos middleware ---
-const hits = new Map(); // ip -> timestamps (20 RPM window)
+// ip -> timestamps (20 RPM window).
+//
+// The map was previously only ever *filtered* on read and never swept, so every
+// distinct client address that ever hit the service kept a key (and its array)
+// alive for the lifetime of the process. Behind a load balancer or a NAT gateway
+// the source address is shared, but a service exposed directly — or an attacker
+// rotating through a source range — grows this map without bound. Entries are
+// now dropped once their whole window has aged out, so the map holds at most the
+// addresses seen in the last 60s.
+const RATE_WINDOW_MS = 60_000;
+const RATE_LIMIT = 20;
+const hits = new Map(); // ip -> timestamps
+let lastSweep = 0;
+
+function sweep(now) {
+  // Amortised: a full pass costs O(active addresses) and there is no reason to
+  // run it on every request when a window is a minute long.
+  if (now - lastSweep < RATE_WINDOW_MS) return;
+  lastSweep = now;
+  for (const [ip, window] of hits) {
+    if (!window.some((t) => now - t < RATE_WINDOW_MS)) hits.delete(ip);
+  }
+}
+
 function chaos(req, res, next) {
   if (req.headers['x-chaos'] === 'off') return next();
   const now = Date.now();
-  const window = (hits.get(req.ip) || []).filter((t) => now - t < 60_000);
+  sweep(now);
+  const window = (hits.get(req.ip) || []).filter((t) => now - t < RATE_WINDOW_MS);
   window.push(now);
   hits.set(req.ip, window);
-  if (window.length > 20) return res.status(429).json({ error: 'rate_limited', retry_after_seconds: 30 });
+  if (window.length > RATE_LIMIT) return res.status(429).json({ error: 'rate_limited', retry_after_seconds: 30 });
   if (CHAOS_ENABLED && rnd() < CHAOS_ERROR_RATE) return res.status(500).json({ error: 'govsim_random_500' });
   const latencySpike = CHAOS_ENABLED && rnd() < 0.1;
   const delay = latencySpike ? 1500 + rnd() * 2500 : rnd() * 120;

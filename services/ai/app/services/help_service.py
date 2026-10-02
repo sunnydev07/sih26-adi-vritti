@@ -41,9 +41,21 @@ SYSTEM: dict[str, str] = _BUNDLE["system"]
 # in general. These route to the status lane (deflection + suggested tool).
 # Kept narrow on purpose: bare "am I eligible" has no marker and is answered
 # from general scheme criteria with a check-Home disclaimer.
-STATUS_MARKERS = {
+#
+# Split in two because substring matching is wrong for the short ones. The
+# entries below used to include a bare "my", and "my" occurs inside "academy",
+# "economy", "ceremony" and "army" — so "which academy has the best faculty?"
+# was classified as a question about the caller's own records and deflected to
+# a tool instead of being answered. Single-word markers are therefore matched
+# on word boundaries (_has_marker); multi-word phrases keep substring
+# matching, which is what they were written for.
+STATUS_WORD_MARKERS = {
     "my", "mera", "meri", "mere", "mujhe", "mujhko", "hamari", "hamaari",
-    "usid", "app-", "application id", "applicationid", "kab", "where is my",
+    "usid", "kab", "kabhi",
+}
+
+STATUS_PHRASE_MARKERS = {
+    "app-", "application id", "applicationid", "where is my",
     "why is my", "paise kab", "payment kab", "scholarship kab",
 }
 
@@ -75,6 +87,14 @@ HINDI_MARKERS = {
     "mera", "meri", "mujhe", "batao", "bataiye", "samjhao", "dikhao",
 }
 
+#: Matched on word boundaries for the same reason STATUS_WORD_MARKERS are:
+#: "hai" is a substring of "Hawaii" and "chain", and "kaun" of nothing useful,
+#: so plain `in` testing answered an English question about a university in
+#: Hawaii in Hindi.
+_HINDI_MARKER_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(m) for m in sorted(HINDI_MARKERS, key=len, reverse=True)) + r")\b"
+)
+
 LANG_SWITCH_MARKERS = {"talk in hindi", "hindi me", "hindi mein", "speak hindi"}
 
 DEVANAGARI_RE = re.compile(r"[\u0900-\u097F]")
@@ -99,8 +119,7 @@ def detect_lang(question: str, requested: str) -> str:
         return "hi"
     if req.startswith("en"):
         # Roman-Hindi questions still read better in Hindi.
-        words = set(re.findall(r"[a-z]+", question.lower()))
-        if words & HINDI_MARKERS:
+        if _HINDI_MARKER_RE.search(question.lower()):
             return "hi"
         return "en"
     return "hi"
@@ -124,7 +143,15 @@ def is_status_question(text: str) -> bool:
     t = _norm(text)
     if re.search(r"app-\d+", t):
         return True
-    return any(m in t for m in STATUS_MARKERS)
+    if any(m in t for m in STATUS_PHRASE_MARKERS):
+        return True
+    return _has_word_marker(t, STATUS_WORD_MARKERS)
+
+
+def _has_word_marker(text: str, markers: set[str]) -> bool:
+    """True when any marker appears in ``text`` as a whole word."""
+    pattern = r"\b(?:" + "|".join(re.escape(m) for m in markers) + r")\b"
+    return re.search(pattern, text) is not None
 
 
 def suggested_tool(text: str) -> str:

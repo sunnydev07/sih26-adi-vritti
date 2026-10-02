@@ -1,5 +1,5 @@
 from app.config import settings
-from app.models.schemas import DocParseResponse, RagQuery
+from app.models.schemas import ClaimType, DocParseResponse, RagQuery
 from app.security import require_service_token
 from app.services import docai_service, rag_service
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
@@ -16,7 +16,10 @@ CHUNK = 64 * 1024
 @router.post("/docai/parse", response_model=DocParseResponse)
 async def parse_doc(
     file: UploadFile,
-    claim_type: str = "income",
+    # Literal, not str: an unknown claim_type is a client error (422), not a
+    # value to echo back and persist. It used to be a bare `str`, so a caller
+    # could store any string in the response's `fields.claim_type`.
+    claim_type: ClaimType = "income",
     _: None = Depends(require_service_token),
 ) -> DocParseResponse:
     limit = settings.docai_max_upload_bytes
