@@ -26,6 +26,21 @@ import {
 } from "@/__mocks__/data";
 import { coverageBlocks, coverageDistricts, coverageSchools, coverageStates, identityQueue, outreachList } from "@/__mocks__/geo-identity";
 
+/**
+ * Browser-side budget for the STP round trip.
+ *
+ * It has to be longer than the BFF's own upstream budget
+ * (`UPSTREAM_TIMEOUT_MS` in `src/lib/ai-upstream.ts`), or the browser aborts a
+ * request the BFF was still waiting on and the upstream call is orphaned: JEV
+ * keeps working, the token it costs is spent, and the answer is discarded.
+ * Previously this was 2500ms against a 2500ms BFF budget — the browser gave up at
+ * the same instant the BFF did, so every slow JEV call was abandoned twice over.
+ */
+const STP_BFF_TIMEOUT_MS = Number.parseInt(
+  process.env.STP_BFF_TIMEOUT_MS ?? "9000",
+  10,
+);
+
 /** Whether the console is currently showing synthetic figures. Rendered as a badge. */
 export const DATA_SOURCE = {
   demo: true,
@@ -61,31 +76,44 @@ export const api = {
   },
   async evaluateStpWithJev(item: { scheme: string; stpScore: number; riskScore: number; slaElapsedDays: number; slaLimitDays: number; claims: { status: string }[] }): Promise<JevStpResult> {
     const isClean = item.claims.every((c) => c.status === "gov-verified" || c.status === "corroborated");
+    // Network failures are recorded, not swallowed. The empty `catch {}` this
+    // replaces made an aborted request, a 502 from the BFF and a bug in this
+    // function indistinguishable in the console: all three produced the same
+    // deterministic fallback with no log line, so "JEV is down" and "we shipped
+    // a typo in the request body" looked identical to whoever was debugging.
+    let failure: string | null = null;
     try {
       // Same-origin BFF proxy (src/app/api/decisions/stp/route.ts) holds the
       // service token server-side, so the browser bundle never sees it.
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch("/api/decisions/stp", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          application: {
-            scheme: item.scheme,
-            all_claims_verified: isClean,
-            income_below_ceiling: true,
-            doc_confidence_avg: item.stpScore / 100,
-            open_deficiencies: item.claims.filter((c) => c.status === "pending-review" || c.status === "expired").length,
-            is_duplicate: false,
-            days_elapsed: item.slaElapsedDays,
-            sla_breached: item.slaElapsedDays > item.slaLimitDays,
+      const timeoutId = setTimeout(() => controller.abort(), STP_BFF_TIMEOUT_MS);
+      let res: Response;
+      try {
+        res = await fetch("/api/decisions/stp", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
           },
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+          body: JSON.stringify({
+            application: {
+              scheme: item.scheme,
+              all_claims_verified: isClean,
+              income_below_ceiling: true,
+              doc_confidence_avg: item.stpScore / 100,
+              open_deficiencies: item.claims.filter((c) => c.status === "pending-review" || c.status === "expired").length,
+              is_duplicate: false,
+              days_elapsed: item.slaElapsedDays,
+              sla_breached: item.slaElapsedDays > item.slaLimitDays,
+            },
+          }),
+          signal: controller.signal,
+        });
+      } finally {
+        // in a finally, not after the await: `fetch` itself throws on a network
+        // error or an abort, which used to skip this line entirely and leave the
+        // timer running until it fired on an already-settled request.
+        clearTimeout(timeoutId);
+      }
       if (res.ok) {
         const data = await res.json();
         return {
@@ -94,11 +122,25 @@ export const api = {
           riskLevel: data.risk_level,
           routing: data.routing,
           latencyMs: data.latency_ms || 120,
-          provider: "JEV 1.13 Free (Live)",
+          // The AI service falls back to a deterministic rule engine when JEV is
+          // unavailable or out of quota, and says so in the payload. Labelling
+          // that row "(Live)" is the same mislabelling the audit trail used to
+          // carry: an officer reading the console must be able to tell a model
+          // verdict from a rule-based one.
+          provider: data.fallback === true
+            ? "JEV Rules (Deterministic Engine)"
+            : "JEV 1.13 Free (Live)",
         };
       }
-    } catch {
-      // offline fallback
+      failure = `BFF responded ${res.status}`;
+    } catch (err) {
+      failure = err instanceof Error ? err.name : "unknown error";
+    }
+
+    if (failure) {
+      console.warn(
+        `[stp] live JEV scoring unavailable (${failure}); using the deterministic engine.`,
+      );
     }
 
     await delay(180);

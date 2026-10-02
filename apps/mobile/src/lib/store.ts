@@ -25,9 +25,30 @@ export const TABLES = {
   outbox: "outbox",
 } as const;
 
+/**
+ * Outbox entry id.
+ *
+ * `Date.now()` alone is not an id: it has millisecond resolution, and two taps on
+ * "upload document" inside the same millisecond produced the same string. The
+ * outbox is keyed by id, so a collision silently overwrites the first entry —
+ * the queued action is gone with nothing to indicate it. `randomUUID` when the
+ * runtime has it, with a counter+random fallback for the runtimes that do not.
+ */
+let outboxSequence = 0;
+
+function nextOutboxId(): string {
+  const globalCrypto = globalThis.crypto;
+  if (globalCrypto && typeof globalCrypto.randomUUID === "function") {
+    return `obx-${globalCrypto.randomUUID()}`;
+  }
+  outboxSequence += 1;
+  const random = Math.random().toString(36).slice(2, 10);
+  return `obx-${Date.now()}-${outboxSequence}-${random}`;
+}
+
 export function enqueueOutbox(entries: OutboxEntry[], kind: OutboxEntry["kind"], payload: Record<string, string>): OutboxEntry[] {
   const entry: OutboxEntry = {
-    id: `obx-${Date.now()}`,
+    id: nextOutboxId(),
     kind,
     payload,
     createdAt: new Date().toISOString(),

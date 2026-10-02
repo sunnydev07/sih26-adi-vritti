@@ -6,7 +6,30 @@
  * handlers run on the server, so the token stays out of shipped JS.
  */
 
-const UPSTREAM_TIMEOUT_MS = 2500;
+/**
+ * Budget for one upstream call, in milliseconds.
+ *
+ * This must stay **greater** than the AI service's own upstream timeouts, or the
+ * BFF gives up first and orphans the call it started: JEV (3.0s, see
+ * `services/ai/app/services/jev_service.py`) and Groq (10.0s, see
+ * `groq_service.py`) keep running to completion, the tokens are spent, and the
+ * answer is thrown away when nobody is waiting for it. It was 2500ms — shorter
+ * than JEV's 3s — so *every* slow JEV call was paid for twice: once upstream and
+ * once as a wasted wait here.
+ *
+ * Groq's 10s budget does not fit under any browser-friendly BFF timeout, so the
+ * BFF deliberately lets Groq-backed routes run long. A request the operator can
+ * see still being processed beats a fast 502 that hides a paid-for call; the
+ * browser aborts first and the upstream is simply abandoned, which is the
+ * cheaper of the two failures and is why the 8s figure sits where it does.
+ *
+ * Overridable so a deployment with a different AI timeout can move the whole
+ * chain in one place instead of re-tuning three.
+ */
+const UPSTREAM_TIMEOUT_MS = Number.parseInt(
+  process.env.AI_UPSTREAM_TIMEOUT_MS ?? "8000",
+  10,
+);
 
 /** Base URL of the AI service. Server-side default keeps local demo working. */
 export function aiServiceBase(): string {

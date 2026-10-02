@@ -1,21 +1,36 @@
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  SESSION_COOKIE,
+  SESSION_TTL_SECONDS,
+  mintSession,
+  sessionSecret,
+  usingDevSecret,
+} from "@/lib/session";
 
 /**
  * Officer sign-in.
  *
  * The login form used to call `router.push("/dashboard")` straight from a client-side
  * OTP length check — it never obtained a credential, so the "sign-in" was a UI
- * animation in front of a public console.
+ * animation in front of a public console. The next version fixed the guard but left
+ * the minting weak: it wrote the cookie value `demo:${phone}` verbatim, and the
+ * guard only checked that *some* value was present. Anyone could set
+ * `adivritti_session=anything` in devtools, and the public deployment minted one on
+ * demand.
  *
- * The correct handoff is to exchange the officer's phone + OTP for a credential at
- * Core. **Core has no officer login endpoint**: `docs/openapi/core.yaml` documents 13
- * paths and none of them is one. So this route cannot mint a real session, and it does
- * not pretend to — minting a cookie anyone can request would restore exactly the hole
- * the guard closes, with the added problem of looking like real authentication.
+ * This route now mints a signed HS256 session (`src/lib/session.ts`) and
+ * `src/proxy.ts` verifies that signature and its expiry. A hand-set cookie is a
+ * redirect to `/login` again.
+ *
+ * The correct handoff is still to exchange the officer's phone + OTP for a
+ * credential at Core. **Core has no officer login endpoint**:
+ * `docs/openapi/core.yaml` documents 13 paths and none of them is one. So this route
+ * cannot mint a real credential, and it does not pretend to.
  *
  * Three outcomes, all explicit:
- *   - Core answers 2xx on /v1/auth/officer/login -> set an httpOnly session cookie.
- *   - development (non-production)               -> set a clearly-marked demo cookie.
+ *   - Core answers 2xx on /v1/auth/officer/login -> sign the returned token into a
+ *     console session.
+ *   - development (non-production)               -> sign a clearly-marked demo session.
  *   - production without Core                     -> 501, and the UI says so.
  *
  * Demo is ON by default in development: localhost dev is a trusted loop, the
@@ -25,16 +40,11 @@ import { NextResponse, type NextRequest } from "next/server";
  * opt out. Production always refuses: a public URL must never mint a cookie
  * anyone can request.
  *
- * GET reports whether demo entry is available, so the login page can offer a
- * one-click demo button instead of making the user guess an OTP that was
- * never sent. Revealing the flag is safe: it authorises nothing by itself.
- *
- * The demo cookie is opt-in, is refused in production, and authorises nothing beyond
- * this Next app: the BFF still calls Core with its own server-side credential, and Core
- * still decides what that credential may do.
+ * The demo session authorises nothing beyond this Next app: the BFF still calls Core
+ * with its own server-side credential, and Core still decides what that credential
+ * may do. It is signed with a published development secret, so it is a session —
+ * not authentication — and `src/proxy.ts` says so in its own javadoc.
  */
-
-const SESSION_COOKIE = "adivritti_session";
 
 function coreBase(): string {
   return (process.env.CORE_URL ?? "http://localhost:8080").trim().replace(/\/+$/, "");
@@ -47,7 +57,14 @@ function demoEnabled(): boolean {
 
 /** Preflight for the login page: is one-click demo entry available? */
 export async function GET() {
-  return NextResponse.json({ demo: demoEnabled() });
+  return NextResponse.json({
+    demo: demoEnabled(),
+    // The login page needs to know whether signing is possible at all, so it can
+    // say "this deployment has no session secret" instead of accepting an OTP
+    // and then silently failing to set a cookie.
+    signable: sessionSecret(process.env) !== null,
+    usingDevSecret: usingDevSecret(process.env),
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -94,7 +111,7 @@ export async function POST(request: NextRequest) {
         { status: 502 },
       );
     }
-    return withSession({ token, demo: false });
+    return withSession(token, false);
   }
 
   if (coreResponse && coreResponse.status !== 404) {
@@ -105,7 +122,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (demoEnabled()) {
-    return withSession({ token: `demo:${phone}`, demo: true });
+    return withSession(`demo:${phone}`, true);
   }
 
   return NextResponse.json(
@@ -120,17 +137,39 @@ export async function POST(request: NextRequest) {
   );
 }
 
-function withSession(value: { token: string; demo: boolean }): NextResponse {
-  const res = NextResponse.json(
-    { ok: true, demo: value.demo },
-    { status: 200 },
-  );
-  res.cookies.set(SESSION_COOKIE, value.token, {
+/**
+ * Sign a console session and set it. Returns a 503 rather than an unsigned cookie
+ * when there is no usable secret: a cookie the guard will reject is worse than an
+ * error, because the login page would report success and the next navigation would
+ * bounce back to `/login` with nothing to show for it.
+ */
+async function withSession(subject: string, demo: boolean): Promise<NextResponse> {
+  const secret = sessionSecret(process.env);
+  if (!secret) {
+    return NextResponse.json(
+      {
+        error_code: "SESSION_NOT_CONFIGURED",
+        message: "This deployment has no OFFICER_SESSION_SECRET, so no session can be "
+          + "issued. Set it to a long random value and restart.",
+      },
+      { status: 503 },
+    );
+  }
+  const token = await mintSession(subject, demo, secret);
+  if (!token) {
+    return NextResponse.json(
+      { error_code: "SESSION_NOT_CONFIGURED", message: "Could not sign a session." },
+      { status: 503 },
+    );
+  }
+
+  const res = NextResponse.json({ ok: true, demo, subject }, { status: 200 });
+  res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 8,
+    maxAge: SESSION_TTL_SECONDS,
   });
   return res;
 }
