@@ -14,7 +14,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,8 +41,40 @@ public class EligibilityService {
     private final ObjectMapper mapper = new ObjectMapper();
     private final Path rulesRoot;
 
-    /** Rules-as-data is read once per (year, scheme) and cached in-process. */
-    private final Map<String, List<Map<String, Object>>> ruleCache = new ConcurrentHashMap<>();
+    /**
+     * Rules-as-data is read once per (year, scheme) and cached in-process.
+     *
+     * <p>An {@link java.util.concurrent.atomic.AtomicReference} to an immutable map,
+     * not a {@link java.util.concurrent.ConcurrentHashMap}. The cache is cleared
+     * wholesale on a timer ({@link #invalidateRuleCache()}) while evaluations read
+     * it concurrently, and a plain concurrent map makes that a lost update: a load
+     * that started before the clear and finished after it re-inserts into a map
+     * the clear already emptied, so the edit the invalidation was meant to pick up
+     * is masked for another full interval. Reads also came in pairs —
+     * {@code containsKey} then {@code get} — which is a second race: a clear
+     * between them turns a cache hit into a null return, i.e. a fail-closed
+     * "no rules" verdict for a scheme that has rules.
+     *
+     * <p>With a snapshot reference, a read sees either the whole old map or the
+     * whole new one and never a half-cleared state, and invalidation is a single
+     * atomic swap.
+     */
+    private final java.util.concurrent.atomic.AtomicReference<
+        Map<String, List<Map<String, Object>>>> ruleCache =
+        new java.util.concurrent.atomic.AtomicReference<>(Map.of());
+
+    private List<Map<String, Object>> cachedRules(String cacheKey) {
+        return ruleCache.get().get(cacheKey);
+    }
+
+    /** Copy-on-write insert: a reader mid-evaluation keeps its snapshot. */
+    private void cacheRules(String cacheKey, List<Map<String, Object>> rules) {
+        ruleCache.updateAndGet(current -> {
+            Map<String, List<Map<String, Object>>> next = new java.util.LinkedHashMap<>(current);
+            next.put(cacheKey, rules);
+            return Map.copyOf(next);
+        });
+    }
 
     public EligibilityService(RuleEngine engine, ClaimRepository claims,
         ClaimValueCipher cipher, SchemeRuleVersionRepository mirror,
@@ -190,7 +221,8 @@ public class EligibilityService {
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> loadRules(String year, String scheme) {
         String cacheKey = year + "/" + scheme;
-        if (ruleCache.containsKey(cacheKey)) return ruleCache.get(cacheKey);
+        List<Map<String, Object>> hit = cachedRules(cacheKey);
+        if (hit != null) return hit;
 
         Path file = rulesRoot.resolve(year).resolve(scheme + ".json").normalize();
         // Defence in depth: the resolved path must stay under the rules root.
@@ -200,7 +232,7 @@ public class EligibilityService {
                     Files.readString(file, StandardCharsets.UTF_8), new TypeReference<>() {});
                 List<Map<String, Object>> parsed = parseRulesDoc(doc);
                 if (parsed != null) {
-                    ruleCache.put(cacheKey, parsed);
+                    cacheRules(cacheKey, parsed);
                     return parsed;
                 }
             } catch (Exception e) {
@@ -209,7 +241,7 @@ public class EligibilityService {
         }
         List<Map<String, Object>> mirrored = loadMirrorRules(year, scheme);
         if (mirrored != null) {
-            ruleCache.put(cacheKey, mirrored);
+            cacheRules(cacheKey, mirrored);
         }
         return mirrored;
     }
@@ -233,11 +265,10 @@ public class EligibilityService {
      */
     @Scheduled(fixedDelayString = "${app.rules-watch-interval-ms:600000}")
     public void invalidateRuleCache() {
-        if (ruleCache.isEmpty()) return;
-        int dropped = ruleCache.size();
-        ruleCache.clear();
+        Map<String, List<Map<String, Object>>> dropped = ruleCache.getAndSet(Map.of());
+        if (dropped.isEmpty()) return;
         log.info("Rules cache invalidated ({} entries); the next evaluation re-reads from "
-            + "packages/rules.", dropped);
+            + "packages/rules.", dropped.size());
     }
 
     /** Shared shape check for disk documents and mirror rows. */

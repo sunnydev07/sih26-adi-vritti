@@ -400,21 +400,44 @@ def main() -> int:
                     f"'{fail['pfms_ref']}', NULL, NULL, 'paid') "
                     "ON CONFLICT DO NOTHING;\n"
                 )
-        # Coverage candidates: students with NO NSP record are the gap the
-        # officer console aggregates. Hashed under the dev GAP_HMAC_SALT.
+        # Coverage candidates: the enrolled cohort per school, hashed under the
+        # dev GAP_HMAC_SALT. Students with NO NSP record are the gap
+        # ('unreached') the officer console aggregates; students WITH an NSP
+        # record are emitted as 'reached', so Core can derive the enrolment
+        # and applicant denominators from the same table instead of reporting
+        # 0 (CoverageGapService: enrolled = all rows, gap = unreached subset).
+        # Previously only unreached rows were emitted and pvtg_status was
+        # hard-coded FALSE, so denominators were 0 and pvtg counts always 0.
         nsp_ids = {s["student_id"] for s in nsp}
-        gap_pool = [s for s in students[: 200 if args.demo else 2000]
-                    if s["student_id"] not in nsp_ids]
+        enrol_pool = students[: 200 if args.demo else 2000]
+        by_id = {s["student_id"]: s for s in enrol_pool}
+        gap_pool = [s for s in enrol_pool if s["student_id"] not in nsp_ids]
+        reached_ids = sorted(nsp_ids & set(by_id))
         for s in gap_pool:
             hkey = gap_hashed_key(s["aadhaar_ref_key"])
             cls = 9 if int(s["student_id"].split("-")[1]) % 2 == 0 else 10
             gender = "F" if s["gender"] == "F" else "M"
+            pvtg = "TRUE" if s["pvtg_status"] else "FALSE"
             f.write(
                 "INSERT INTO coverage_candidate "
                 "(id, hashed_key, state, district, block, school, class_level, gender, "
                 "pvtg_status, outreach_status) VALUES "
                 f"(gen_random_uuid(), '{hkey}', '{s['state']}', '{s['district']}', "
-                f"'{s['block']}', '{s['school']}', {cls}, '{gender}', FALSE, 'unreached') "
+                f"'{s['block']}', '{s['school']}', {cls}, '{gender}', {pvtg}, 'unreached') "
+                "ON CONFLICT (hashed_key) DO NOTHING;\n"
+            )
+        for sid in reached_ids:
+            s = by_id[sid]
+            hkey = gap_hashed_key(s["aadhaar_ref_key"])
+            cls = 9 if int(s["student_id"].split("-")[1]) % 2 == 0 else 10
+            gender = "F" if s["gender"] == "F" else "M"
+            pvtg = "TRUE" if s["pvtg_status"] else "FALSE"
+            f.write(
+                "INSERT INTO coverage_candidate "
+                "(id, hashed_key, state, district, block, school, class_level, gender, "
+                "pvtg_status, outreach_status) VALUES "
+                f"(gen_random_uuid(), '{hkey}', '{s['state']}', '{s['district']}', "
+                f"'{s['block']}', '{s['school']}', {cls}, '{gender}', {pvtg}, 'reached') "
                 "ON CONFLICT (hashed_key) DO NOTHING;\n"
             )
 

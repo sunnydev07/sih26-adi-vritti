@@ -49,7 +49,7 @@ class SecurityConfigHardenedChainTest {
 
     @RestController
     static class PingEndpoint {
-        @GetMapping({"/v1/scholars/ping", "/v1/admin/ping", "/actuator/health/ping"})
+        @GetMapping({"/v1/scholars/ping", "/v1/admin/ping", "/actuator/health/ping", "/v3/api-docs"})
         String ping() {
             return "ok";
         }
@@ -94,13 +94,28 @@ class SecurityConfigHardenedChainTest {
     }
 
     @Test
-    @DisplayName("the regenerated API document stays public for the drift check")
-    void apiDocsArePublicWithoutAToken() throws Exception {
+    @DisplayName("the regenerated API document needs a token outside the dev profile")
+    void apiDocsRequireATokenWhenHardened() throws Exception {
         // No springdoc handler is registered in this slice, so a request the
-        // chain permits falls through to 404 — which is exactly the assertion:
-        // the security chain let it through instead of answering 401/403. The
-        // document is public by design (the contract it is diffed against is
-        // committed to the repo).
-        mvc.perform(get("/v3/api-docs")).andExpect(status().isNotFound());
+        // chain *permits* falls through to 404 and a request it *rejects* answers
+        // 401. Asserting on 404 therefore asserts the security decision, not the
+        // absence of a document.
+        mvc.perform(get("/v3/api-docs")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("an officer token can read the API document")
+    void officerReachesTheApiDocs() throws Exception {
+        mvc.perform(get("/v3/api-docs")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_OFFICER"))))
+            .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("a scholar token cannot read the API document")
+    void scholarCannotReachTheApiDocs() throws Exception {
+        mvc.perform(get("/v3/api-docs")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_SCHOLAR"))))
+            .andExpect(status().isForbidden());
     }
 }

@@ -33,4 +33,30 @@ public interface CoverageCandidateRepository extends JpaRepository<CoverageCandi
         @Param("block") String block,
         @Param("school") String school,
         @Param("pvtgOnly") boolean pvtgOnly);
+
+    /**
+     * Enrolment denominators for the same filter. Counts every candidate row
+     * regardless of outreach status: the candidate table holds the enrolled
+     * cohort per school (populated by the ministry join), while the gap query
+     * above counts only the unreached subset. Same group key and ordering, so
+     * the service can join the two result sets on the school tuple.
+     */
+    @Query("""
+        select c.school, c.block, c.district, c.state,
+                count(c),
+                sum(case when c.pvtgStatus then 1 else 0 end)
+        from CoverageCandidate c
+        where (:state is null or c.state = :state)
+          and (:district is null or c.district = :district)
+          and (:block is null or c.block = :block)
+          and (:school is null or c.school = :school)
+          and (:pvtgOnly = false or c.pvtgStatus = true)
+        group by c.school, c.block, c.district, c.state
+        order by count(c) desc
+        """)
+    List<Object[]> aggregateEnrolledBySchool(@Param("state") String state,
+        @Param("district") String district,
+        @Param("block") String block,
+        @Param("school") String school,
+        @Param("pvtgOnly") boolean pvtgOnly);
 }

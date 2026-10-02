@@ -52,9 +52,16 @@ public class SecurityConfig {
     private static final int MIN_HMAC_KEY_BYTES = 32;
 
     private final boolean allowInsecureDev;
+    private final boolean devProfile;
 
-    public SecurityConfig(@Value("${app.security.allow-insecure-dev:false}") boolean allowInsecureDev) {
+    public SecurityConfig(
+        @Value("${app.security.allow-insecure-dev:false}") boolean allowInsecureDev,
+        @Value("${spring.profiles.active:default}") String activeProfile) {
         this.allowInsecureDev = allowInsecureDev;
+        // Comma-separated when several profiles are active ("dev,local").
+        this.devProfile = java.util.Arrays.stream(activeProfile.split(","))
+            .map(String::trim)
+            .anyMatch("dev"::equals);
     }
 
     @Bean
@@ -75,11 +82,19 @@ public class SecurityConfig {
             // context fail to refresh in the dev profile.
             .authorizeHttpRequests(auth -> {
                 auth.requestMatchers("/actuator/health/**", "/actuator/info").permitAll();
-                // The generated OpenAPI document is public by design: the
-                // hand-written contract it is diffed against (docs/openapi/core.yaml)
-                // is committed to the repo, so serving it reveals no secrets. The CI
-                // contract-drift check fetches it unauthenticated.
-                auth.requestMatchers("/v3/api-docs", "/v3/api-docs/**").permitAll();
+                // The generated OpenAPI document is a complete route map for a
+                // service whose payloads carry Aadhaar reference keys, income
+                // figures and DPDP access-audit rows. Serving it to an anonymous
+                // scanner hands over that inventory for free, so it is NOT public
+                // in a locked-down deployment: an OFFICER/ADMIN token is required,
+                // and the dev profile keeps it open because the CI contract-drift
+                // job fetches it unauthenticated.
+                if (devProfile) {
+                    auth.requestMatchers("/v3/api-docs", "/v3/api-docs/**").permitAll();
+                } else {
+                    auth.requestMatchers("/v3/api-docs", "/v3/api-docs/**")
+                        .hasAnyRole(OFFICER_ROLE, ADMIN_ROLE);
+                }
                 if (allowInsecureDev) {
                     log.warn("SECURITY: app.security.allow-insecure-dev=true — every /v1 endpoint is "
                         + "UNAUTHENTICATED. This is for local demos only.");

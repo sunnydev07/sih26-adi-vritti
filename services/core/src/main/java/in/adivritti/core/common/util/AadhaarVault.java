@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.regex.Pattern;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,6 +39,9 @@ public class AadhaarVault {
 
     private static final String ALGORITHM = "HmacSHA256";
     private static final int MIN_KEY_BYTES = 32;
+
+    /** The digest half of a reference key: 32 bytes, hex-encoded. */
+    private static final Pattern REFERENCE_DIGEST = Pattern.compile("^[0-9a-fA-F]{64}$");
 
     /** Verhoeff check-digit tables, used to reject obviously malformed Aadhaar input. */
     private static final int[][] D = {
@@ -125,9 +129,24 @@ public class AadhaarVault {
         return REF_KEY_VERSION + ":" + keyId + ":" + HexFormat.of().formatHex(mac(normalized));
     }
 
-    /** Derive a reference key for an already-vaulted key (idempotent passthrough). */
+    /**
+     * Derive a persisted reference key for an already-vaulted key (idempotent passthrough).
+     *
+     * <p>The full shape is checked, not just the {@code AVR1:<keyId>:} prefix. The
+     * previous {@code startsWith} accepted {@code AVR1:v1:} and
+     * {@code AVR1:v1:00} — a truncated or hand-written string that satisfied the
+     * test. It is not used as a security gate today, so nothing leaked while it
+     * was wrong; it is a predicate whose entire job is to say "this is a reference
+     * key", and saying yes to a string that is not one is the failure mode. The
+     * digest half is 64 hex characters, uppercase on the way out of
+     * {@link HexFormat}, and accepted either case on the way in.
+     */
     public boolean isReferenceKey(String value) {
-        return value != null && value.startsWith(REF_KEY_VERSION + ":" + keyId + ":");
+        if (value == null) return false;
+        String prefix = REF_KEY_VERSION + ":" + keyId + ":";
+        if (!value.startsWith(prefix)) return false;
+        String digest = value.substring(prefix.length());
+        return REFERENCE_DIGEST.matcher(digest).matches();
     }
 
     /** Strip the spaces and dashes people type into Aadhaar fields. */

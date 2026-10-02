@@ -1,5 +1,6 @@
 package in.adivritti.core.admin;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -100,7 +101,8 @@ class AdminExceptionsTest {
     @Test
     @DisplayName("items carry computed STP scores, not 0.0")
     void itemsCarryComputedScores() throws Exception {
-        when(applications.findAll()).thenReturn(List.of(overdue, healthy));
+        when(applications.findAll(any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of(overdue, healthy)));
 
         mvc.perform(get("/v1/admin/exceptions"))
             .andExpect(status().isOk())
@@ -116,7 +118,8 @@ class AdminExceptionsTest {
     @Test
     @DisplayName("default sort is risk-descending, not newest-first")
     void defaultSortIsRiskDescending() throws Exception {
-        when(applications.findAll()).thenReturn(List.of(healthy, overdue));
+        when(applications.findAll(any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of(healthy, overdue)));
 
         mvc.perform(get("/v1/admin/exceptions"))
             .andExpect(status().isOk())
@@ -139,7 +142,10 @@ class AdminExceptionsTest {
     @Test
     @DisplayName("risk sort pages the ordered list and reports the full total")
     void riskSortPaginates() throws Exception {
-        when(applications.findAll()).thenReturn(List.of(overdue, healthy));
+        // totalElements is 2 even though the request asked for 1 — the total in
+        // the response is the COUNT over the whole filter, not the page size.
+        when(applications.findAll(any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of(overdue, healthy)));
 
         mvc.perform(get("/v1/admin/exceptions").param("page", "2").param("page_size", "1"))
             .andExpect(status().isOk())
@@ -147,5 +153,30 @@ class AdminExceptionsTest {
             .andExpect(jsonPath("$.items[0].stage").value("ministry"))
             .andExpect(jsonPath("$.total").value(2))
             .andExpect(jsonPath("$.page").value(2));
+    }
+
+    @Test
+    @DisplayName("risk sort asks the database for a bounded window, not every row")
+    void riskSortBoundsTheScan() throws Exception {
+        // The regression this guards: the endpoint used to call
+        // applications.findAll() with no limit and sort the whole table in
+        // memory. On the seeded backlog that is an OOM. The repository must be
+        // asked for a capped, newest-first window instead.
+        when(applications.findAll(any(Pageable.class)))
+            .thenReturn(new PageImpl<>(List.of(overdue, healthy)));
+
+        mvc.perform(get("/v1/admin/exceptions")).andExpect(status().isOk());
+
+        org.mockito.ArgumentCaptor<Pageable> window =
+            org.mockito.ArgumentCaptor.forClass(Pageable.class);
+        org.mockito.Mockito.verify(applications).findAll(window.capture());
+        assertThat(window.getValue().getPageSize())
+            .isEqualTo(AdminController.MAX_RISK_SCAN_ROWS);
+        assertThat(window.getValue().getPageNumber()).isZero();
+        assertThat(window.getValue().getSort().getOrderFor("createdAt"))
+            .isNotNull()
+            .matches(o -> o.isDescending());
+        org.mockito.Mockito.verify(applications, org.mockito.Mockito.never())
+            .findAll();
     }
 }

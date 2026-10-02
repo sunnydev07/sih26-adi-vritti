@@ -17,7 +17,10 @@ import in.adivritti.core.consent.repository.ConsentArtefactRepository;
 import in.adivritti.core.identity.entity.Scholar;
 import in.adivritti.core.identity.repository.ScholarRepository;
 import in.adivritti.core.security.ScholarAccessGuard;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +46,14 @@ class ConsentGateTest {
     private ConsentService consentService;
     private ConsentGate gate;
 
+    /**
+     * Pinned "now". Every fixture below is stated relative to it, so the
+     * minority boundary is a fact about the test rather than about the day it
+     * runs — the reason the clock is injected rather than read from the system.
+     */
+    private static final Instant NOW = Instant.parse("2026-10-02T00:00:00Z");
+    private static final Clock FIXED = Clock.fixed(NOW, ZoneOffset.UTC);
+
     private static Scholar adult() {
         Scholar s = new Scholar();
         s.usid = USID;
@@ -54,7 +65,7 @@ class ConsentGateTest {
         Scholar s = adult();
         s.demographics = new LinkedHashMap<>(Map.of(
             "name", "Minor Scholar",
-            "dob", LocalDate.now().minusYears(10).toString(),
+            "dob", LocalDate.now(FIXED).minusYears(10).toString(),
             "guardianName", "Meena Devi"));
         return s;
     }
@@ -74,7 +85,7 @@ class ConsentGateTest {
         scholars = mock(ScholarRepository.class);
         consentService = mock(ConsentService.class);
         gate = new ConsentGate(consents, scholars, consentService,
-            mock(ScholarAccessGuard.class));
+            mock(ScholarAccessGuard.class), FIXED);
     }
 
     @Test
@@ -161,19 +172,12 @@ class ConsentGateTest {
         verify(consentService).recordAccess(USID, "self", "claims", c.id);
     }
 
-    @Test
-    @DisplayName("unparseable dob takes the adult path rather than denying")
-    void unparseableDobIsAdultPath() {
-        Scholar s = adult();
-        s.demographics.put("dob", "not-a-date");
-        ConsentArtefact c = grant(PURPOSE, "Adult Scholar");
-        when(scholars.findById(USID)).thenReturn(Optional.of(s));
-        when(consents.findActiveByUsidAndPurpose(USID, PURPOSE)).thenReturn(List.of(c));
-
-        gate.requireConsent(USID, PURPOSE, "self", "claims");
-
-        verify(consentService).recordAccess(USID, "self", "claims", c.id);
-    }
+    // The next test used to assert the opposite of what it now asserts. It read
+    // "unparseable dob takes the adult path rather than denying", and it passed,
+    // because the catch block returned false — a minor whose dob had been
+    // mangled in transit was served on their own consent with no guardian grant.
+    // Failing closed costs a real case: a record with a corrupt dob needs a
+    // guardian grant before it is readable. Failing open cost a DPDP breach.
 
     @Test
     @DisplayName("unknown scholar is 404 with no audit row")
@@ -198,7 +202,7 @@ class ConsentGateTest {
     void accessorComesFromGuard() {
         ScholarAccessGuard guard = mock(ScholarAccessGuard.class);
         when(guard.accessorName()).thenReturn("officer-neha");
-        ConsentGate guarded = new ConsentGate(consents, scholars, consentService, guard);
+        ConsentGate guarded = new ConsentGate(consents, scholars, consentService, guard, FIXED);
         ConsentArtefact c = grant(PURPOSE, "Adult Scholar");
         when(scholars.findById(USID)).thenReturn(Optional.of(adult()));
         when(consents.findActiveByUsidAndPurpose(USID, PURPOSE)).thenReturn(List.of(c));
@@ -224,7 +228,7 @@ class ConsentGateTest {
     @DisplayName("exactly-18 dob is the adult path; boundary is strictly under 18")
     void eighteenIsAdult() {
         Scholar s = adult();
-        s.demographics.put("dob", LocalDate.now().minusYears(18).toString());
+        s.demographics.put("dob", LocalDate.now(FIXED).minusYears(18).toString());
         ConsentArtefact c = grant(PURPOSE, "Adult Scholar");
         when(scholars.findById(USID)).thenReturn(Optional.of(s));
         when(consents.findActiveByUsidAndPurpose(USID, PURPOSE)).thenReturn(List.of(c));
@@ -232,6 +236,69 @@ class ConsentGateTest {
         gate.requireConsent(USID, PURPOSE, "self", "claims");
 
         verify(consentService).recordAccess(USID, "self", "claims", c.id);
-        assertThat(ConsentGate.isMinor(s)).isFalse();
+        assertThat(ConsentGate.isMinor(s, FIXED)).isFalse();
+    }
+
+    // --- fail-closed on an unreadable dob (task 1.2) ----------------------------
+
+    @Test
+    @DisplayName("an unreadable dob takes the guardian path, not the adult path")
+    void unparseableDobIsTreatedAsAMinor() {
+        Scholar s = adult();
+        s.demographics.put("dob", "08/04/2011");
+        assertThat(ConsentGate.isMinor(s, FIXED))
+            .as("a dob we cannot read is a dob we cannot rule out as a minor's")
+            .isTrue();
+    }
+
+    @Test
+    @DisplayName("a minor with a mangled dob is denied on their own consent alone")
+    void unparseableDobStillDeniesWithoutAGuardianGrant() {
+        Scholar s = adult();
+        s.demographics.put("dob", "not-a-date");
+        s.demographics.put("guardianName", "Meena Devi");
+        // Granted by the scholar themselves, not the guardian.
+        ConsentArtefact own = grant(PURPOSE, "Adult Scholar");
+        when(scholars.findById(USID)).thenReturn(Optional.of(s));
+        when(consents.findActiveByUsidAndPurpose(USID, PURPOSE)).thenReturn(List.of(own));
+
+        assertThatThrownBy(() -> gate.requireConsent(USID, PURPOSE, "self", "claims"))
+            .isInstanceOfSatisfying(ForbiddenException.class,
+                e -> assertThat(e.getErrorCode()).isEqualTo("CONSENT_REQUIRED"));
+        // The denial is still audited — a blocked attempt belongs in the trail.
+        verify(consentService).recordAccess(USID, "self", "claims", null);
+    }
+
+    @Test
+    @DisplayName("a guardian grant still opens a record whose dob cannot be read")
+    void unparseableDobWithGuardianGrantPasses() {
+        Scholar s = adult();
+        s.demographics.put("dob", "2011");
+        s.demographics.put("guardianName", "Meena Devi");
+        ConsentArtefact c = grant(PURPOSE, "Meena Devi");
+        when(scholars.findById(USID)).thenReturn(Optional.of(s));
+        when(consents.findActiveByUsidAndPurpose(USID, PURPOSE)).thenReturn(List.of(c));
+
+        gate.requireConsent(USID, PURPOSE, "self", "claims");
+
+        verify(consentService).recordAccess(USID, "self", "claims", c.id);
+    }
+
+    @Test
+    @DisplayName("no dob at all is not a minor claim, so it takes the adult path")
+    void absentDobTakesTheAdultPath() {
+        assertThat(ConsentGate.isMinor(adult(), FIXED)).isFalse();
+    }
+
+    @Test
+    @DisplayName("the age boundary follows the injected clock, not the wall clock")
+    void theInjectedClockDecidesTheBoundary() {
+        Scholar s = adult();
+        String dob = "2010-01-01";
+        s.demographics.put("dob", dob);
+        // 2026: sixteen. 2029: nineteen. Same record, same code, correct both times.
+        assertThat(ConsentGate.isMinor(s, FIXED)).isTrue();
+        assertThat(ConsentGate.isMinor(s, Clock.fixed(
+            Instant.parse("2029-06-01T00:00:00Z"), ZoneOffset.UTC))).isFalse();
     }
 }

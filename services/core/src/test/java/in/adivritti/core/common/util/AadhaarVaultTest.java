@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Base64;
+import java.util.Locale;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 class AadhaarVaultTest {
@@ -126,6 +128,39 @@ class AadhaarVaultTest {
         String ref = v.referenceKey("999999990019");
         assertTrue(v.isReferenceKey(ref));
         assertFalse(v.isReferenceKey("999999990019"));
+    }
+
+    @Test
+    @DisplayName("a prefix with no digest is not a reference key")
+    void prefixAloneIsNotAReferenceKey() {
+        // The old check was startsWith("AVR1:" + keyId + ":"), so every one of
+        // these returned true — a predicate that says "this is a reference key"
+        // saying yes to strings that are not reference keys.
+        AadhaarVault v = vault(KEY_32);
+        assertFalse(v.isReferenceKey("AVR1:v1:"));
+        assertFalse(v.isReferenceKey("AVR1:v1:00"));
+        assertFalse(v.isReferenceKey("AVR1:v1:" + "0".repeat(63)));
+        assertFalse(v.isReferenceKey("AVR1:v1:" + "0".repeat(65)));
+        assertFalse(v.isReferenceKey("AVR1:v1:" + "z".repeat(64)));
+        assertFalse(v.isReferenceKey("AVR1:v1:" + "0".repeat(63) + "!"));
+        assertFalse(v.isReferenceKey("AVR1:v1:" + "0".repeat(32) + " " + "0".repeat(31)));
+        assertFalse(v.isReferenceKey("AVR1:v1:"));
+        assertFalse(v.isReferenceKey("AVR1:v2:" + "0".repeat(64)));
+    }
+
+    @Test
+    @DisplayName("a 64-char digest is accepted in either hex case")
+    void digestIsCaseInsensitive() {
+        AadhaarVault v = vault(KEY_32);
+        String ref = v.referenceKey("999999990019");
+        assertTrue(v.isReferenceKey(ref));
+        // Only the digest half is case-insensitive. The keyId is not: it is
+        // compared verbatim so a key minted under "v1" is not read back as "V1"
+        // during a rotation, which would silently pair a key id with the wrong
+        // secret.
+        String lowerDigest = "AVR1:v1:" + ref.substring("AVR1:v1:".length()).toLowerCase(Locale.ROOT);
+        assertTrue(v.isReferenceKey(lowerDigest));
+        assertFalse(v.isReferenceKey(ref.toUpperCase(Locale.ROOT)));
     }
 
     // ------------------------------------------------------------- Verhoeff

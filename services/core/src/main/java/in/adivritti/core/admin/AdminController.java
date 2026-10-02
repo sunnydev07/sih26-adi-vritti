@@ -15,6 +15,8 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.Comparator;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +37,28 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v1/admin")
 @Validated
 public class AdminController {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminController.class);
+
+    /**
+     * Upper bound on how many rows the {@code breach_risk} sort pulls into memory.
+     *
+     * <p>Breach risk is computed in Java ({@code SlaCalculator.breachRisk}), not read
+     * from a column, so the sort cannot be pushed into SQL. The previous
+     * implementation did the honest thing and loaded the entire filtered set —
+     * {@code applications.findAll()} with no limit — which is fine for a console
+     * demo and an out-of-memory kill with a real backlog. The seeded dataset is
+     * already tens of thousands of applications.
+     *
+     * <p>So the scan is capped, and the candidate window is the most recent
+     * {@value} rows: an SLA breach queue is worked newest-first anyway, and a
+     * stale application that has been sitting past its deadline for a year is
+     * no longer a page-1 item in any useful sense. {@code total} is a real COUNT
+     * over the whole filter, so the response still reports the true backlog
+     * rather than the size of the window — and when the window truncates, the
+     * truncation is logged rather than passed off as the complete ordering.
+     */
+    static final int MAX_RISK_SCAN_ROWS = 2_000;
 
     private final CoverageGapService gaps;
     private final ApplicationRepository applications;
@@ -87,17 +111,30 @@ public class AdminController {
         boolean hasScheme = scheme != null && !scheme.isBlank();
 
         if ("breach_risk".equals(sort)) {
-            // Risk lives in Java, not in a column: order the filtered set by
-            // computed risk (newest first on ties, so the order is stable) and
-            // page the ordered list.
-            List<Application> filtered = hasStage && hasScheme
-                ? applications.findByStageAndScheme(stage, scheme)
+            // Risk lives in Java, not in a column, so the ordering cannot be done
+            // in SQL. Pull a bounded, newest-first window, order that by computed
+            // risk (newest first on ties, so the order is stable) and page the
+            // ordered list. totalElements is the COUNT over the *whole* filter, so
+            // the caller sees the real backlog even when the window is capped.
+            var window = PageRequest.of(0, MAX_RISK_SCAN_ROWS,
+                Sort.by(Sort.Direction.DESC, "createdAt"));
+            var result = hasStage && hasScheme
+                ? applications.findByStageAndScheme(stage, scheme, window)
                 : hasStage
-                    ? applications.findByStage(stage)
+                    ? applications.findByStage(stage, window)
                     : hasScheme
-                        ? applications.findByScheme(scheme)
-                        : applications.findAll();
-            List<Application> ordered = filtered.stream()
+                        ? applications.findByScheme(scheme, window)
+                        : applications.findAll(window);
+
+            long total = result.getTotalElements();
+            if (total > result.getNumberOfElements()) {
+                log.warn("Exception queue breach_risk scan truncated: {} of {} matching "
+                    + "applications considered (most recent {}). Raise the page size or "
+                    + "narrow the filter to see the full ordering.",
+                    result.getNumberOfElements(), total, MAX_RISK_SCAN_ROWS);
+            }
+
+            List<Application> ordered = result.getContent().stream()
                 .sorted(Comparator.comparingDouble(this::risk).reversed()
                     .thenComparing(Comparator.comparing(
                         (Application a) -> a.createdAt, Comparator.nullsLast(Comparator.naturalOrder()))
@@ -108,7 +145,7 @@ public class AdminController {
                 .limit(pageSize)
                 .map(this::toItem)
                 .toList();
-            return ResponseEntity.ok(new ExceptionPage(items, ordered.size(), page, pageSize));
+            return ResponseEntity.ok(new ExceptionPage(items, total, page, pageSize));
         }
 
         Sort order = "sla_deadline".equals(sort)

@@ -446,9 +446,34 @@ contract and the wire format is snake_case; `ScholarAccessGuard` is the IDOR gua
    `expo-build-properties` pinned to the SDK-52 line (`0.13.3`, was `57.0.22`),
    `expo-sqlite`/`react-native` aligned to `expo install --check` expectations
    (`Dependencies are up to date`, `tsc --noEmit` clean); deleted the untracked
-   root `app.json` that shadowed the Android package (`com.devsunny.adivritti`
-   vs `in.gov.mota.adivritti`).
-   Tests: govsim suite 6/6 green (incl. the headerless health test).
+    root `app.json` that shadowed the Android package (`com.devsunny.adivritti`
+    vs `in.gov.mota.adivritti`).
+    Tests: govsim suite 6/6 green (incl. the headerless health test).
+
+---
+
+## P1 item 4 remainder + P2 close-out — done (2026-10-02)
+
+**Verified state.** `.\gradlew.bat test -PjavaToolchainVersion=23` (with
+`JAVA_HOME=C:\Program Files\Java\jdk-23`) is green: **45 suites / 303 tests /
+0 failures / 0 errors**. `node --check services/govsim/src/index.js` clean.
+Not run: pytest (no Python on this machine; needs >= 3.13), Docker/compose,
+`make dev` boot.
+
+| Remaining item | Change | Test that guards it |
+|---|---|---|
+| P1-6 coverage denominators (the last open code item) | `CoverageCandidateRepository.aggregateEnrolledBySchool` counts the full enrolled cohort per school; `CoverageGapService` joins gap + enrolled on the school tuple — per-school `enrolledStudents`, `applicants = enrolled - gap`, true totals (fully-reached schools feed totals without appearing in the outreach list). No new table: denominators come from the same privacy-preserving HMAC join | `CoverageGapServiceTest` (4: derived denominators, fully-reached totals, empty → zeros, filter passthrough) |
+| Seed emits the enrolled cohort | `generate.py` now seeds `reached` candidate rows for NSP students (same geo/hash shape) and real `pvtg_status` instead of hard-coded `FALSE`, so denominators and PVTG counts are non-zero in a seeded stack. Seed regen needs Python >= 3.13 — not re-run here | covered by the service test above (seed output shape unchanged otherwise) |
+| P1-4 consent/audit wiring, P1-5 JAGO route, exceptions bounded scan | confirmed already in tree, not re-done: `ConsentGate.requireConsent` called from `ClaimsService`, `DashboardService`, `DisbursementService`, `JagoToolRouter`; `jago_service.py` routes `get_my_applications` to Core's JAGO tool endpoint; `AdminController` breach-risk scan is a bounded 2,000-row newest-first window (`MAX_RISK_SCAN_ROWS`) with a logged truncation and a true COUNT total | `ConsentGateTest`, `EndpointAuthorisationTest`, `AdminExceptionsTest` (incl. the window-bound test) |
+
+**Definition-of-done mapping.** `make test-core` green (this machine, Oct 2);
+contract shape unchanged (`CoverageGapResponse` fields already existed —
+only the values are real now, so no client regen needed); Redis-hit and
+evidence-scoping behaviour covered by `VerificationCacheBehaviourTest`;
+`access_audit` writes on every personal-data read via `ConsentGate`
+(allowed + denied). Still requiring a live stack: `make dev` boot,
+`make test-ai` on Python 3.13, generated-client round-trip against a running
+Core, second-verify-served-from-Redis observed end-to-end.
 
 
 
