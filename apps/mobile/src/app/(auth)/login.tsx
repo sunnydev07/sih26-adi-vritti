@@ -111,8 +111,17 @@ export default function LoginScreen() {
             />
             {phone.length === 10 ? <Ionicons name="checkmark-circle" size={20} color="#047857" /> : null}
           </View>
-          <View style={{ marginTop: 14 }}>
-            <PrimaryButton amber title={t.loginSendOtp} icon="chatbox" onPress={() => router.replace("/(tabs)")} />
+          <View style={{ marginTop: 14, opacity: phone.length === 10 ? 1 : 0.55 }}>
+            <PrimaryButton
+              amber
+              title={t.loginSendOtp}
+              icon="chatbox"
+              onPress={() => {
+                // Demo entry only: no OTP is sent and no session is minted.
+                // Guard the tap so a short/empty number cannot enter the app.
+                if (phone.length === 10) router.replace("/(tabs)");
+              }}
+            />
           </View>
           <Tx variant="tiny" color={colors.muted} style={{ marginTop: 12, textAlign: "center" }}>
             {t.loginDemoNote}

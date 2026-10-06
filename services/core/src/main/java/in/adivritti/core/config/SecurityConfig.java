@@ -1,7 +1,15 @@
 package in.adivritti.core.config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.StreamSupport;
 import javax.crypto.spec.SecretKeySpec;
 import org.slf4j.Logger;
@@ -9,8 +17,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.convert.converter.Converter;
-import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -64,6 +72,14 @@ public class SecurityConfig {
             .anyMatch("dev"::equals);
     }
 
+    /**
+     * Local serializer for pre-controller rejections. Deliberately not an injected
+     * bean: the filter chain must stay constructible in minimal test slices without
+     * Jackson auto-configuration, and every value written is already a
+     * string/number/map so no modules are needed.
+     */
+    private static final ObjectMapper ENVELOPE_MAPPER = new ObjectMapper();
+
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -72,7 +88,16 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .oauth2ResourceServer(oauth -> oauth
-                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())))
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+                // Pre-controller rejections must use the same error envelope as
+                // GlobalExceptionHandler (error_code/message/details/at/path per
+                // docs/openapi/core.yaml), not Spring's default HTML/empty body.
+                .authenticationEntryPoint((request, response, ex) ->
+                    writeEnvelope(request, response, ENVELOPE_MAPPER, HttpStatus.UNAUTHORIZED,
+                        "AUTHENTICATION_REQUIRED", "Authentication required"))
+                .accessDeniedHandler((request, response, ex) ->
+                    writeEnvelope(request, response, ENVELOPE_MAPPER, HttpStatus.FORBIDDEN,
+                        "FORBIDDEN", "Access denied")))
             // One authorizeHttpRequests block, one anyRequest() call. Both matter:
             // Spring Security's registry rejects a second anyRequest() with "Can't
             // configure anyRequest after itself", and a second authorizeHttpRequests
@@ -105,6 +130,31 @@ public class SecurityConfig {
                 }
             });
         return http.build();
+    }
+
+    /**
+     * Serialises a filter-chain rejection in the contract's error envelope.
+     *
+     * <p>Keys are written snake_case literally (rather than via the
+     * {@code ErrorBody} record) so the shape holds even if the record or the
+     * mapper's naming strategy changes; {@code SecurityContractTest} pins the
+     * record side, this pins the pre-controller side.
+     */
+    private static void writeEnvelope(HttpServletRequest request, HttpServletResponse response,
+        ObjectMapper mapper, HttpStatus status, String code, String message)
+        throws IOException {
+        response.setStatus(status.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(java.nio.charset.StandardCharsets.UTF_8.name());
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("status", status.value());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error_code", code);
+        body.put("message", message);
+        body.put("details", details);
+        body.put("at", ZonedDateTime.now(ZoneOffset.UTC).toString());
+        body.put("path", request == null ? null : request.getRequestURI());
+        mapper.writeValue(response.getOutputStream(), body);
     }
 
     /**

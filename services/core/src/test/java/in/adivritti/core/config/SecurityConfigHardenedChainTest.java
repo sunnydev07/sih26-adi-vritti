@@ -3,6 +3,7 @@ package in.adivritti.core.config;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -72,11 +73,32 @@ class SecurityConfigHardenedChainTest {
     }
 
     @Test
+    @DisplayName("unauthenticated rejection uses the contract error envelope")
+    void unauthenticatedRejectionUsesTheEnvelope() throws Exception {
+        mvc.perform(get("/v1/scholars/ping"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.error_code").value("AUTHENTICATION_REQUIRED"))
+            .andExpect(jsonPath("$.details.status").value(401))
+            .andExpect(jsonPath("$.path").value("/v1/scholars/ping"));
+    }
+
+    @Test
     @DisplayName("a scholar token cannot reach the officer console routes")
     void scholarIsForbiddenFromTheAdminRoutes() throws Exception {
         mvc.perform(get("/v1/admin/ping")
                 .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_SCHOLAR"))))
             .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("forbidden rejection uses the contract error envelope")
+    void forbiddenRejectionUsesTheEnvelope() throws Exception {
+        mvc.perform(get("/v1/admin/ping")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_SCHOLAR"))))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.error_code").value("FORBIDDEN"))
+            .andExpect(jsonPath("$.details.status").value(403))
+            .andExpect(jsonPath("$.path").value("/v1/admin/ping"));
     }
 
     @Test
