@@ -77,7 +77,8 @@ class VerificationIdempotencyTest {
             if (c.id == null) c.id = UUID.randomUUID();
             return c;
         });
-        when(claims.findFirstByUsidAndIdempotencyKey(any(UUID.class), any(String.class)))
+        when(claims.findFirstByUsidAndClaimTypeAndIdempotencyKey(any(UUID.class), any(String.class),
+                any(String.class)))
             .thenReturn(Optional.empty());
         ClaimValueCipher cipher = mock(ClaimValueCipher.class);
         when(cipher.seal(any(String.class))).thenReturn(new byte[] {1});
@@ -100,7 +101,7 @@ class VerificationIdempotencyTest {
     @DisplayName("repeat with the same key returns the same claim without running the chain")
     void sameKeyReplays() {
         Claim existing = existingClaim(usid, "key-1");
-        when(claims.findFirstByUsidAndIdempotencyKey(usid, "key-1"))
+        when(claims.findFirstByUsidAndClaimTypeAndIdempotencyKey(usid, "income", "key-1"))
             .thenReturn(Optional.of(existing));
 
         VerifyResponse response =
@@ -115,12 +116,30 @@ class VerificationIdempotencyTest {
     }
 
     @Test
+    @DisplayName("same key for a different claim type does not replay another claim")
+    void sameKeyDifferentClaimTypeRunsVerification() {
+        Claim existing = existingClaim(usid, "key-1");
+        when(claims.findFirstByUsidAndClaimTypeAndIdempotencyKey(usid, "income", "key-1"))
+            .thenReturn(Optional.of(existing));
+        when(claims.findFirstByUsidAndClaimTypeAndIdempotencyKey(usid, "domicile", "key-1"))
+            .thenReturn(Optional.empty());
+
+        VerifyResponse response =
+            orchestrator.verify(new VerifyRequest(usid, "domicile", "ev-9", "key-1"));
+
+        assertThat(response.claimId()).isNotEqualTo(existing.id);
+        assertThat(response.claimType()).isEqualTo("domicile");
+        verify(strategy).attempt(any(VerificationAttempt.class));
+        verify(claims).saveAndFlush(any(Claim.class));
+    }
+
+    @Test
     @DisplayName("keyless requests skip the idempotency lookup and store no key")
     void noKeyUntouched() {
         orchestrator.verify(new VerifyRequest(usid, "income", "ev-1", null));
 
-        verify(claims, never())
-            .findFirstByUsidAndIdempotencyKey(any(UUID.class), any(String.class));
+        verify(claims, never()).findFirstByUsidAndClaimTypeAndIdempotencyKey(any(UUID.class),
+            any(String.class), any(String.class));
         ArgumentCaptor<Claim> captor = ArgumentCaptor.forClass(Claim.class);
         verify(claims).save(captor.capture());
         assertThat(captor.getValue().idempotencyKey).isNull();

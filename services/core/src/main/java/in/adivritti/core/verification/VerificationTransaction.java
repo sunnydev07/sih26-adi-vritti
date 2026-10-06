@@ -76,8 +76,9 @@ public class VerificationTransaction {
     }
 
     /**
-     * Raised when two attempts with the same idempotency key reach the wallet
-     * write together and the database's unique index picks a winner.
+     * Raised when two attempts with the same idempotency key for the same scholar
+     * and claim type reach the wallet write together and the database's unique
+     * index picks a winner.
      *
      * <p>It propagates out of the transaction on purpose. The recovery the old
      * code attempted — catch the violation, then re-read the winner's row in the
@@ -103,8 +104,8 @@ public class VerificationTransaction {
         }
         String idempotencyKey = normalizedKey(req.idempotencyKey());
         if (idempotencyKey != null) {
-            Optional<Claim> prior =
-                claims.findFirstByUsidAndIdempotencyKey(req.usid(), idempotencyKey);
+            Optional<Claim> prior = claims.findFirstByUsidAndClaimTypeAndIdempotencyKey(
+                req.usid(), req.claimType(), idempotencyKey);
             if (prior.isPresent()) {
                 return replayResponse(prior.get());
             }

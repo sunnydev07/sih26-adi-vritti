@@ -56,8 +56,8 @@ public class VerificationOrchestrator {
      * already in the wallet — which is what makes skipping the write on a hit safe.
      *
      * <p>The contract's {@code idempotencyKey} is honoured on top of the cache: a key
-     * that already produced a claim for this scholar short-circuits to a replay of
-     * that claim (same claim id, verdict, confidence, validity; empty provenance
+     * that already produced a claim for this scholar and claim type short-circuits
+     * to a replay of that claim (same claim id, verdict, confidence, validity; empty provenance
      * trail, because the replay performed no verification). Unlike the cache, the
      * key survives across different evidence refs. Only successful verifications
      * deduplicate — a failure persists a fresh deficiency per attempt by design.
@@ -75,7 +75,7 @@ public class VerificationOrchestrator {
             // transaction that lost has rolled back, so nothing of it is
             // visible; the retry starts a fresh transaction whose idempotency
             // pre-check finds the winner's row and replays it. One wallet row
-            // per (usid, key), whichever attempt got there first.
+            // per (usid, claim type, key), whichever attempt got there first.
             log.info("Replaying the winning claim for a lost idempotency race: {}",
                 race.getMessage());
             return transaction.run(req);

@@ -66,6 +66,17 @@ jobs:
           fi
           echo "$out" | tail -10
 
+      - name: Apply V3__idempotency_scope.sql
+        run: |
+          set +e
+          out=$(psql "postgresql://adivritti:adivritti_dev@localhost:5432/adivritti" \
+            -v ON_ERROR_STOP=1 -f services/core/src/main/resources/db/migration/V3__idempotency_scope.sql 2>&1); rc=$?
+          if [ $rc -ne 0 ]; then
+            echo "$out" | while IFS= read -r l; do echo "::error title=V3__idempotency_scope.sql::${l}"; done
+            exit 1
+          fi
+          echo "$out" | tail -10
+
       - name: Assert the schema landed
         run: |
           url="postgresql://adivritti:adivritti_dev@localhost:5432/adivritti"
@@ -75,6 +86,13 @@ jobs:
           psql "$url" -tAc "SELECT extname FROM pg_extension WHERE extname='vector';"
           psql "$url" -tAc "SELECT to_regclass('public.identity_resolution');"
           psql "$url" -tAc "SELECT column_name FROM information_schema.columns WHERE table_name='claim' AND column_name='idempotency_key';"
+
+      - name: Assert the idempotency scope
+        run: |
+          url="postgresql://adivritti:adivritti_dev@localhost:5432/adivritti"
+          def=$(psql "$url" -tAc "SELECT indexdef FROM pg_indexes WHERE schemaname='public' AND indexname='uq_claim_idempotency';")
+          echo "$def"
+          echo "$def" | grep -q "claim_type" || { echo "::error title=uq_claim_idempotency::expected the (usid, claim_type, idempotency_key) scope"; exit 1; }
 
       - name: Re-running V1 must be a no-op
         run: |
@@ -92,6 +110,14 @@ jobs:
           psql "postgresql://adivritti:adivritti_dev@localhost:5432/adivritti" \
             -v ON_ERROR_STOP=1 -q \
             -f services/core/src/main/resources/db/migration/V2__idempotency.sql
+
+      - name: Re-running V3 must be a no-op
+        run: |
+          # DROP INDEX IF EXISTS plus CREATE UNIQUE INDEX IF NOT EXISTS
+          # converge on the scoped definition.
+          psql "postgresql://adivritti:adivritti_dev@localhost:5432/adivritti" \
+            -v ON_ERROR_STOP=1 -q \
+            -f services/core/src/main/resources/db/migration/V3__idempotency_scope.sql
 
   core:
     runs-on: ubuntu-latest

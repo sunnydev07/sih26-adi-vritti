@@ -86,7 +86,8 @@ class VerificationCacheBehaviourTest {
             });
             // No prior keyed claims in this suite: the cache behaviour under test
             // must not be short-circuited by the idempotency replay.
-            when(repository.findFirstByUsidAndIdempotencyKey(any(UUID.class), anyString()))
+            when(repository.findFirstByUsidAndClaimTypeAndIdempotencyKey(any(UUID.class), anyString(),
+                    anyString()))
                 .thenReturn(Optional.empty());
             return repository;
         }

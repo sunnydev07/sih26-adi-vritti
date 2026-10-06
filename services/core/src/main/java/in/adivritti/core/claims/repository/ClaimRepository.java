@@ -35,7 +35,15 @@ public interface ClaimRepository extends JpaRepository<Claim, UUID> {
 
     /**
      * Idempotency lookup: the wallet row a previous verification with this caller
-     * key already produced for this scholar, if any.
+     * key already produced for this scholar and claim type, if any.
+     *
+     * <p>The claim type is part of the scope on purpose. A caller key is only
+     * meaningful within one operation: the same key string reused for a
+     * different claim type is a different verification, and answering it from
+     * another type's claim would hand back the wrong verdict under the wrong
+     * type. The unique index {@code uq_claim_idempotency} enforces the same
+     * scope at the database level.
      */
-    Optional<Claim> findFirstByUsidAndIdempotencyKey(UUID usid, String idempotencyKey);
+    Optional<Claim> findFirstByUsidAndClaimTypeAndIdempotencyKey(UUID usid, String claimType,
+        String idempotencyKey);
 }

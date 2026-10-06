@@ -510,7 +510,10 @@ components:
             $ref: '#/components/schemas/IdentityRecord'
         idempotency_key:
           type: string
-          description: Client-supplied key for safe retries
+          description: >
+            Client-supplied key for safe retries, scoped to identity
+            resolution: a repeated key replays the stored resolution report
+            instead of re-running the resolution.
 
     IdentityRecord:
       type: object
@@ -631,7 +634,12 @@ components:
           type: string
           enum: [identity, st_status, income, domicile, academic, enrolment, institution, net_jrf, disability, bank_account]
         evidence_ref: { type: string, description: MinIO object key / DigiLocker doc id backing this attempt }
-        idempotency_key: { type: string }
+        idempotency_key:
+          type: string
+          description: >
+            Client-supplied key for safe retries, scoped to the scholar and
+            claim type: the same key for a different claim type is a different
+            verification and does not replay another type's claim.
 
     ProvenanceRecord:
       type: object

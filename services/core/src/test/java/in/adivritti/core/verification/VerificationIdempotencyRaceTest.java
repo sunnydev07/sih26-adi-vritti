@@ -36,7 +36,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
 
 /**
- * Task 2.1: the wallet must hold exactly one row per (usid, idempotency key) even
+ * Task 2.1: the wallet must hold exactly one row per (usid, claim type,
+ * idempotency key) even
  * when several attempts with the same key are in flight together, and the loser
  * must not turn a successful verification into a 500.
  *
@@ -96,7 +97,7 @@ class VerificationIdempotencyRaceTest {
             if (c.id == null) c.id = UUID.randomUUID();
             if (c.verifiedAt == null) c.verifiedAt = ZonedDateTime.now();
             if (c.idempotencyKey != null) {
-                String key = c.usid + "/" + c.idempotencyKey;
+                String key = c.usid + "/" + c.claimType + "/" + c.idempotencyKey;
                 if (rows.putIfAbsent(key, c) != null) {
                     aborted.put(Thread.currentThread(), true);
                     lostRaces.incrementAndGet();
@@ -108,7 +109,7 @@ class VerificationIdempotencyRaceTest {
             return c;
         }
 
-        Optional<Claim> find(UUID usid, String key) {
+        Optional<Claim> find(UUID usid, String claimType, String key) {
             if (aborted.getOrDefault(Thread.currentThread(), false)) {
                 postViolationReads.incrementAndGet();
                 throw new IllegalStateException(
@@ -116,7 +117,7 @@ class VerificationIdempotencyRaceTest {
                         + " transaction block");
             }
             preCheckReads.incrementAndGet();
-            return Optional.ofNullable(rows.get(usid + "/" + key));
+            return Optional.ofNullable(rows.get(usid + "/" + claimType + "/" + key));
         }
 
         private void checkLive() {
@@ -133,8 +134,9 @@ class VerificationIdempotencyRaceTest {
         ClaimRepository repo = mock(ClaimRepository.class);
         when(repo.save(any(Claim.class))).thenAnswer(i -> wallet.save(i.getArgument(0)));
         when(repo.saveAndFlush(any(Claim.class))).thenAnswer(i -> wallet.save(i.getArgument(0)));
-        when(repo.findFirstByUsidAndIdempotencyKey(any(UUID.class), any(String.class)))
-            .thenAnswer(i -> wallet.find(i.getArgument(0), i.getArgument(1)));
+        when(repo.findFirstByUsidAndClaimTypeAndIdempotencyKey(any(UUID.class), any(String.class),
+                any(String.class)))
+            .thenAnswer(i -> wallet.find(i.getArgument(0), i.getArgument(1), i.getArgument(2)));
         return repo;
     }
 
@@ -233,7 +235,7 @@ class VerificationIdempotencyRaceTest {
         assertThat(failure.get())
             .as("no attempt may surface a constraint violation to the caller")
             .isNull();
-        assertThat(wallet.rowCount()).as("one row per (usid, idempotency key)").isEqualTo(1);
+        assertThat(wallet.rowCount()).as("one row per (usid, claim type, idempotency key)").isEqualTo(1);
         assertThat(claimIds).hasSize(threads);
         assertThat(claimIds).as("every caller gets the same claim id")
             .containsOnly(claimIds.get(0));
@@ -264,7 +266,7 @@ class VerificationIdempotencyRaceTest {
         winner.validUntil = ZonedDateTime.now().plusDays(365);
         winner.idempotencyKey = KEY;
         winner.valueEncrypted = new byte[] {1};
-        wallet.rows.put(winner.usid + "/" + KEY, winner);
+        wallet.rows.put(winner.usid + "/income/" + KEY, winner);
 
         var service = new VerificationTransaction(
             List.of(verifying(0, new AtomicInteger())), repo,
@@ -272,7 +274,8 @@ class VerificationIdempotencyRaceTest {
 
         // The pre-check is bypassed to force the write to collide: simulate the
         // row appearing between the pre-check and the INSERT.
-        when(repo.findFirstByUsidAndIdempotencyKey(any(UUID.class), any(String.class)))
+        when(repo.findFirstByUsidAndClaimTypeAndIdempotencyKey(any(UUID.class), any(String.class),
+                any(String.class)))
             .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.run(
