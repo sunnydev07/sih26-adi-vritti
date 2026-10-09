@@ -4,11 +4,20 @@
  * The browser calls same-origin `/api/jago/help`; this handler attaches the
  * server-side AI_SERVICE_TOKEN and forwards to the AI service. 502 responses
  * tell the client to use its offline mirror (the judge demo runs WIFI OFF).
+ *
+ * 401 unless the caller holds a verified console session: proxy.ts only guards
+ * /dashboard/*, so this handler checks the session itself — otherwise anyone
+ * could burn Groq quota anonymously. (The 500-char question cap below is also
+ * the body-size bound, so no separate 413 is needed on this route.)
  */
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { postUpstream } from "@/lib/ai-upstream";
+import { verifyRequestSession } from "@/lib/session";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  if (!(await verifyRequestSession(request, process.env))) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
   let body: unknown;
   try {
     body = await request.json();

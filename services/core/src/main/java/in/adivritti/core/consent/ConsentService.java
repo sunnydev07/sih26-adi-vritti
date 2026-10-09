@@ -56,7 +56,12 @@ public class ConsentService {
         if (req.grantedBy() == null || req.grantedBy().isBlank()) {
             throw new IllegalArgumentException("grantedBy is required");
         }
-        if (req.expiresAt() != null && !req.expiresAt().isAfter(ZonedDateTime.now())) {
+        // One clock reading for the whole grant: validating expiry against one
+        // `now()` and stamping `grantedAt` from another let a short-lived
+        // consent pass validation and then violate the
+        // consent_expiry_after_grant CHECK at INSERT time.
+        ZonedDateTime now = ZonedDateTime.now();
+        if (req.expiresAt() != null && !req.expiresAt().isAfter(now)) {
             throw new IllegalArgumentException("expiresAt must be in the future");
         }
         List<String> scope = req.scope() == null ? List.of() : req.scope();
@@ -70,6 +75,7 @@ public class ConsentService {
         c.purpose = req.purpose();
         c.scope = new ArrayList<>(scope);
         c.grantedBy = req.grantedBy();
+        c.grantedAt = now;
         c.expiresAt = req.expiresAt();
         return toDto(consents.save(c));
     }

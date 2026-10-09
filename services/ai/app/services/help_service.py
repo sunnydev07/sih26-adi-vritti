@@ -51,8 +51,13 @@ SYSTEM: dict[str, str] = _BUNDLE["system"]
 # matching, which is what they were written for.
 STATUS_WORD_MARKERS = {
     "my", "mera", "meri", "mere", "mujhe", "mujhko", "hamari", "hamaari",
-    "usid", "kab", "kabhi",
+    "kab", "kabhi",
 }
+# "usid" used to be a word marker, so "what is usid" — a general question the
+# USID faq answers — deflected to the status lane instead. A bare USID only
+# signals a personal question with possessive framing ("my usid record",
+# "mera usid"), which the "my"/"mera" markers already catch; APP-\d+ and the
+# phrases above catch the rest.
 
 STATUS_PHRASE_MARKERS = {
     "app-", "application id", "applicationid", "where is my",

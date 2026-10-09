@@ -78,4 +78,56 @@ class RuleValidatorTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("schema");
     }
+
+    private static void writeRuleFile(Path root, String name, String rulesJson) throws Exception {
+        Path real = Path.of(REAL_RULES).toAbsolutePath().normalize();
+        Files.copy(real.resolve("schema.json"), root.resolve("schema.json"));
+        Path year = root.resolve("2026-27");
+        Files.createDirectory(year);
+        Files.writeString(year.resolve(name), rulesJson, StandardCharsets.UTF_8);
+    }
+
+    private static String doc(String rules) {
+        return """
+            {"scheme": "NOS", "scheme_name": "N", "academic_year": "2026-27",
+             "category": "welfare", "ministry": "MoTA", "portal": "NOS",
+             "rules": [%s],
+             "award": {}}""".formatted(rules);
+    }
+
+    @Test
+    @DisplayName("not_null is an accepted op: the engine runs it")
+    void notNullOpValidates(@TempDir Path root) throws Exception {
+        writeRuleFile(root, "nos.json",
+            doc("""
+                {"claim": "x", "op": "not_null", "onFail": "no"}"""));
+
+        Map<String, JsonNode> docs = new RuleValidator(root.toString()).validateAll();
+
+        assertThat(docs).containsKey("2026-27/nos");
+    }
+
+    @Test
+    @DisplayName("lte without a value fails at startup, not on first evaluation")
+    void lteWithoutValueFails(@TempDir Path root) throws Exception {
+        writeRuleFile(root, "nos.json",
+            doc("""
+                {"claim": "income", "op": "lte", "onFail": "no"}"""));
+
+        assertThatThrownBy(() -> new RuleValidator(root.toString()).validateAll())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("2026-27/nos");
+    }
+
+    @Test
+    @DisplayName("lte with a string threshold fails at startup")
+    void lteWithStringValueFails(@TempDir Path root) throws Exception {
+        writeRuleFile(root, "nos.json",
+            doc("""
+                {"claim": "income", "op": "lte", "value": "a-lot", "onFail": "no"}"""));
+
+        assertThatThrownBy(() -> new RuleValidator(root.toString()).validateAll())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("2026-27/nos");
+    }
 }

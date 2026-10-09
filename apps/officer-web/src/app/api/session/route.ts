@@ -80,7 +80,12 @@ export async function POST(request: NextRequest) {
 
   const phone = typeof body.phone === "string" ? body.phone.trim() : "";
   const otp = typeof body.otp === "string" ? body.otp.trim() : "";
-  if (phone.replace(/\D/g, "").length < 10 || otp.length < 4) {
+  if (
+    phone.replace(/\D/g, "").length < 10
+    || otp.length < 4
+    || phone.length > 32
+    || otp.length > 64
+  ) {
     return NextResponse.json(
       { error_code: "VALIDATION_FAILED", message: "Enter a 10-digit number and a 4+ digit OTP" },
       { status: 400 },
@@ -104,14 +109,17 @@ export async function POST(request: NextRequest) {
 
   if (coreResponse && coreResponse.ok) {
     const payload = (await coreResponse.json().catch(() => null)) as { token?: string } | null;
-    const token = payload?.token;
-    if (!token) {
+    if (!payload?.token) {
       return NextResponse.json(
         { error_code: "INTERNAL_ERROR", message: "Core returned no session token" },
         { status: 502 },
       );
     }
-    return withSession(token, false);
+    // The Core bearer token is deliberately NOT stored or echoed: the console
+    // session carries only a stable, non-credential subject, and the BFF calls
+    // Core with its own server-side credential. Returning the token here would
+    // hand it to page JS, extensions and log scrapers on every officer login.
+    return withSession(`officer:${phone.replace(/\D/g, "")}`, false);
   }
 
   if (coreResponse && coreResponse.status !== 404) {
@@ -163,13 +171,30 @@ async function withSession(subject: string, demo: boolean): Promise<NextResponse
     );
   }
 
-  const res = NextResponse.json({ ok: true, demo, subject }, { status: 200 });
+  const res = NextResponse.json({ ok: true, demo }, { status: 200 });
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: SESSION_TTL_SECONDS,
+  });
+  return res;
+}
+
+/**
+ * Sign-out. The session cookie is httpOnly, so client JS cannot delete it —
+ * only a server Set-Cookie can. Without this route an 8-hour session on a
+ * shared kiosk stayed usable until expiry no matter what the UI did.
+ */
+export async function DELETE() {
+  const res = NextResponse.json({ ok: true });
+  res.cookies.set(SESSION_COOKIE, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
   });
   return res;
 }

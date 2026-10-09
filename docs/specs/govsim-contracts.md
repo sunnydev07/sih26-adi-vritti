@@ -31,7 +31,7 @@ retries with jitter, idempotency keys). Disable chaos per-request with
 Transport chaos above stays random, but a verify DECISION is a pure function
 of the USID (stable FNV-1a hash in `src/index.js`): the same USID gets the
 same answer on every call and every run. Pass rates: NSP 75%, SFMP 65%,
-NOS 50%, UGC-NTA 40%, DigiLocker-proxy 87.5%. The demo student
+NOS 50%, UGC-NTA 40%, DigiLocker-proxy 87.5%, UDISE+ 90%, PFMS 90%. The demo student
 (`11111111-1111-4111-8111-111111111111`) always verifies, so the demo path is
 stable while every system keeps a genuine rejection path.
 

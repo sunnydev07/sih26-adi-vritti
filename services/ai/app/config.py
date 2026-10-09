@@ -37,6 +37,7 @@ protected route depends on them):
 
 from __future__ import annotations
 
+import difflib
 import logging
 import os
 from collections.abc import Mapping
@@ -66,20 +67,23 @@ def _is_production() -> bool:
 
 
 #: A configuration name this close to a real field is a typo, not somebody
-#: else's variable. The test is deliberately narrow in *both* directions:
+#: else's variable. Closeness is a difflib similarity ratio, not a prefix test:
 #:
-#:   * a real field is a case-insensitive prefix of the variable (``GAP_HMAC_SALT``
-#:     vs ``GAP_HMAC_SALT_TYPO``), or
-#:   * the variable is a case-insensitive prefix of a real field
-#:     (``GAP_HMAC_SALT_TYP`` vs ``GAP_HMAC_SALT``).
+#:   * ``GAP_HMAC_SALT_TYPO`` vs ``gap_hmac_salt`` is 0.87 — flagged;
+#:   * ``GAP_HMAC_SA`` vs ``gap_hmac_salt`` is 0.92 — flagged;
+#:   * ``OPENCODE`` vs ``opencode_zen_api_key`` is 0.59 — left alone;
+#:   * ``GROQ`` / ``ENABLE`` vs their fields are ~0.5-0.7 — left alone.
 #:
-#: The first version of this check used a broad prefix list ("anything starting
-#: with AI_") and immediately failed on an unrelated ``AI_AGENT`` in the
-#: surrounding shell. A check that breaks on a variable it does not own is a
-#: check that gets switched off, which restores the silent-typo behaviour it
-#: exists to prevent. The 4-character floor keeps a two-letter fragment from
-#: matching everything.
+#: The first version of this check matched on prefixes ("a real field starts
+#: with the variable or vice versa") and refused to boot on an unrelated
+#: ``AI_AGENT`` in the surrounding shell; the second version still matched
+#: ``OPENCODE`` as a prefix of ``opencode_zen_api_key`` and bricked the service
+#: anywhere that variable is exported. A check that breaks on a variable it
+#: does not own is a check that gets switched off, which restores the
+#: silent-typo behaviour it exists to prevent. The 4-character floor keeps a
+#: two-letter fragment from matching everything.
 _MIN_TYPO_NAME_LENGTH = 4
+_TYPO_SIMILARITY_FLOOR = 0.8
 
 
 def _typo_candidates(fields: set[str], environ: Mapping[str, str] | None = None) -> list[str]:
@@ -93,7 +97,10 @@ def _typo_candidates(fields: set[str], environ: Mapping[str, str] | None = None)
             continue
         if len(lowered) < _MIN_TYPO_NAME_LENGTH:
             continue
-        if any(field.startswith(lowered) or lowered.startswith(field) for field in known):
+        if any(
+            difflib.SequenceMatcher(None, lowered, field).ratio() >= _TYPO_SIMILARITY_FLOOR
+            for field in known
+        ):
             suspicious.append(name)
     return sorted(suspicious)
 

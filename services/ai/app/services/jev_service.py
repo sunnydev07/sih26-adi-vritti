@@ -7,6 +7,7 @@ and anomaly detection with deterministic rule-based fallbacks.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from typing import Any
 
@@ -24,17 +25,53 @@ class JevUnavailableError(RuntimeError):
     pass
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    """float() that cannot throw: unparseable or non-finite input -> default.
+
+    Upstream and caller-supplied dicts are unvalidated, so a bare float() here
+    turned "not-a-number" into a 500. NaN/inf are rejected too: NaN poisons
+    every comparison it touches and inf breaks the 0..1 output contract.
+    """
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return default
+    return result if math.isfinite(result) else default
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    """int() that cannot throw: unparseable input -> default."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _clamp_prob(value: float) -> float:
+    return min(1.0, max(0.0, value))
+
+
 def _extract_prob(val: Any) -> float:
-    """Safely extracts probability from a noul answer structure."""
-    if isinstance(val, dict):
-        if "noul" in val:
-            return float(val["noul"])
-        if "probability" in val:
-            return float(val["probability"])
-    if isinstance(val, (int, float)):
-        return float(val)
+    """Extract a 0..1 probability from a noul answer structure.
+
+    Upstream JSON is unvalidated: {"noul": "high"}, {"noul": null} and
+    {"probability": "bad"} all used to raise through float() and 500 the
+    request, because the only thing callers catch is JevUnavailableError.
+    Anything unparseable is "unknown" (0.5); anything numeric is clamped, so a
+    model returning 2.0 can never produce a stored probability of 2.0.
+    """
     if isinstance(val, bool):
         return 1.0 if val else 0.0
+    if isinstance(val, dict):
+        if "noul" in val:
+            return _clamp_prob(_safe_float(val["noul"], 0.5))
+        if "probability" in val:
+            return _clamp_prob(_safe_float(val["probability"], 0.5))
+        return 0.5
+    if isinstance(val, (int, float)):
+        return _clamp_prob(_safe_float(val, 0.5))
+    if isinstance(val, str):
+        return _clamp_prob(_safe_float(val.strip(), 0.5))
     return 0.5
 
 
@@ -82,17 +119,27 @@ async def decide(
         raise JevUnavailableError(f"JEV timed out after {timeout}s") from exc
     except httpx.HTTPStatusError as exc:
         elapsed = (time.perf_counter() - start) * 1000
+        # Status code only: the exception string routinely embeds request
+        # headers (Authorization: Bearer …), which must never reach the log.
         logger.warning(
-            "OpenCode Zen JEV HTTP %d in %.1fms: %s",
+            "OpenCode Zen JEV HTTP %d in %.1fms",
             exc.response.status_code,
             elapsed,
-            exc.response.text[:200],
         )
         raise JevUnavailableError(f"JEV HTTP {exc.response.status_code}") from exc
-    except Exception as exc:
+    except httpx.RequestError as exc:
+        # Transport-level only (connect, read, pool). Narrow on purpose: a
+        # malformed response body (ValueError from resp.json()) or a bug in
+        # this module is NOT "JEV is down" — those propagate as 500s so the
+        # fault stays visible instead of being laundered into a 503. Only the
+        # exception type is logged: the message embeds request headers.
         elapsed = (time.perf_counter() - start) * 1000
-        logger.warning("OpenCode Zen JEV connection failure in %.1fms: %s", elapsed, exc)
-        raise JevUnavailableError(f"JEV connection error: {exc}") from exc
+        logger.warning(
+            "OpenCode Zen JEV transport error in %.1fms: %s", elapsed, type(exc).__name__
+        )
+        raise JevUnavailableError(
+            f"JEV transport error: {type(exc).__name__}"
+        ) from exc
 
     elapsed = (time.perf_counter() - start) * 1000
     decisions = data.get("answers") or data.get("decisions") or data
@@ -105,8 +152,8 @@ def _fallback_stp(app: dict[str, Any]) -> dict[str, Any]:
     """Rule-based fallback when JEV is unavailable."""
     verified = app.get("all_claims_verified", False)
     income_ok = app.get("income_below_ceiling", True)
-    doc_conf = float(app.get("doc_confidence_avg", 0.0))
-    deficiencies = int(app.get("open_deficiencies", 0))
+    doc_conf = _safe_float(app.get("doc_confidence_avg", 0.0))
+    deficiencies = _safe_int(app.get("open_deficiencies", 0))
     is_dupe = app.get("is_duplicate", False)
 
     if is_dupe or deficiencies > 0:
@@ -140,10 +187,10 @@ async def evaluate_stp(application: dict[str, Any]) -> dict[str, Any]:
         "scheme": application.get("scheme", ""),
         "all_claims_verified": application.get("all_claims_verified", False),
         "income_below_ceiling": application.get("income_below_ceiling", True),
-        "doc_confidence_avg": float(application.get("doc_confidence_avg", 0.0)),
-        "open_deficiencies": int(application.get("open_deficiencies", 0)),
+        "doc_confidence_avg": _safe_float(application.get("doc_confidence_avg", 0.0)),
+        "open_deficiencies": _safe_int(application.get("open_deficiencies", 0)),
         "is_duplicate": application.get("is_duplicate", False),
-        "days_elapsed": int(application.get("days_elapsed", 0)),
+        "days_elapsed": _safe_int(application.get("days_elapsed", 0)),
         "sla_breached": application.get("sla_breached", False),
     }
     questions = {
@@ -226,6 +273,17 @@ async def classify_jago_intent(user_message: str, lang: str = "hi") -> dict[str,
 
     try:
         decisions, latency = await decide(state, questions)
+        if not isinstance(decisions, dict) or all(
+            decisions.get(name) is None for name in questions
+        ):
+            # JEV answered with nothing usable (empty object, nulls, or a
+            # non-object): labelling that a live model decision would put a
+            # fabricated verdict in the UI and the audit trail.
+            fb = _fallback_intent(user_message)
+            fb["latency_ms"] = latency
+            fb["fallback"] = True
+            fb["fallback_reason"] = "empty_model_response"
+            return fb
         scored = {}
         for intent_name in questions:
             scored[intent_name] = _extract_prob(decisions.get(intent_name))

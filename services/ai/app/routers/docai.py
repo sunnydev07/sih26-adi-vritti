@@ -24,19 +24,24 @@ async def parse_doc(
 ) -> DocParseResponse:
     limit = settings.docai_max_upload_bytes
     raw = bytearray()
-    while True:
-        chunk = await file.read(CHUNK)
-        if not chunk:
-            break
-        raw.extend(chunk)
-        if len(raw) > limit:
-            # Literal 413: Starlette renamed its constant to
-            # HTTP_413_CONTENT_TOO_LARGE and deprecating the old name would pin us
-            # to whichever version is installed.
-            raise HTTPException(
-                status_code=413,
-                detail=f"Upload exceeds the {limit} byte limit",
-            )
+    try:
+        while True:
+            chunk = await file.read(CHUNK)
+            if not chunk:
+                break
+            raw.extend(chunk)
+            if len(raw) > limit:
+                # Literal 413: Starlette renamed its constant to
+                # HTTP_413_CONTENT_TOO_LARGE and deprecating the old name would pin us
+                # to whichever version is installed.
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"Upload exceeds the {limit} byte limit",
+                )
+    finally:
+        # The spooled temp file is otherwise released only by GC/request
+        # teardown; under load that is FD and disk pressure.
+        await file.close()
 
     # Errors are ignored on purpose: a non-UTF-8 upload still yields whatever
     # text the extractor can work with.

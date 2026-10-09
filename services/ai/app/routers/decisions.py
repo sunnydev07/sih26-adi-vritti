@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.config import settings
 from app.models.schemas import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -18,7 +19,7 @@ from app.models.schemas import (
     StpScoreResponse,
 )
 from app.security import require_service_token
-from app.services import fraud_service, groq_service, jev_service
+from app.services import fraud_service, groq_service, help_service, jev_service, rag_service
 
 router = APIRouter(prefix="/decisions", tags=["decisions"])
 
@@ -87,16 +88,57 @@ async def chat(
     req: ChatCompletionRequest,
     _: None = Depends(require_service_token),
 ) -> ChatCompletionResponse:
-    """Execute grounded chat completion via Groq (openai/gpt-oss-20b)."""
+    """Grounded general-help chat via Groq (openai/gpt-oss-20b).
+
+    This is NOT a status oracle: the app's contract is that the LLM never
+    free-generates a status, amount, or eligibility verdict. Three interlocks
+    enforce it — caller system messages are rejected at the schema boundary
+    (the server owns the system prompt), personal-status questions are
+    deflected to JAGO tools without ever reaching the model, and everything
+    else is answered from retrieved official clauses that the reply must cite.
+    """
+    user_texts = [
+        m.content.strip() for m in req.messages if m.role == "user" and m.content.strip()
+    ]
+    if not user_texts:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="at least one user message is required",
+        )
+    question = user_texts[-1][:2000]
+    lang = req.lang if req.lang in ("hi", "en") else "hi"
+
+    if help_service.is_status_question(question):
+        deflection = help_service.answer(question, lang)
+        return ChatCompletionResponse(
+            reply=deflection["answer"],
+            model=settings.groq_model,
+            latency_ms=deflection["latency_ms"],
+        )
+
+    clauses = rag_service.retrieve_clauses(question, None, top_k=2)
+    context = "\n".join(
+        f"[{c['id']}] {c['scheme_name']} — {c['clause']}: {c['content']}" for c in clauses
+    )
+    system = (
+        "You are Adi-Vritti's general help assistant. Answer ONLY general "
+        "how-it-works questions using the official clauses below, citing the "
+        "[ID] for every requirement or amount. You have NO personal data: NEVER "
+        "state an application status, payment amount, or eligibility verdict. "
+        "If asked for personal status, reply exactly with: "
+        f"{help_service.DEFLECT_EN if lang == 'en' else help_service.DEFLECT_HI}"
+        + (f"\n\nOfficial clauses:\n{context}" if context else "")
+    )
+    history = [{"role": m.role, "content": m.content} for m in req.messages[-10:]]
     try:
         reply, latency = await groq_service.chat_completion(
-            messages=req.messages,
-            temperature=req.temperature,
-            max_tokens=req.max_tokens or 1024,
+            messages=[{"role": "system", "content": system}, *history],
+            temperature=min(req.temperature, 0.5),
+            max_tokens=min(req.max_tokens or 1024, 1024),
         )
         return ChatCompletionResponse(
             reply=reply,
-            model="openai/gpt-oss-20b",
+            model=settings.groq_model,
             latency_ms=latency,
         )
     except groq_service.GroqUnavailableError as exc:

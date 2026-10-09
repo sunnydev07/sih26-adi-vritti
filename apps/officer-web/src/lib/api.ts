@@ -35,11 +35,16 @@ import { coverageBlocks, coverageDistricts, coverageSchools, coverageStates, ide
  * keeps working, the token it costs is spent, and the answer is discarded.
  * Previously this was 2500ms against a 2500ms BFF budget — the browser gave up at
  * the same instant the BFF did, so every slow JEV call was abandoned twice over.
+ *
+ * Tuned via NEXT_PUBLIC_STP_BFF_TIMEOUT_MS: plain process.env.* (without the
+ * NEXT_PUBLIC_ prefix) is not bundled to the browser, so the old name inlined
+ * to undefined and the fallback always won — operator tuning did nothing with
+ * no warning.
  */
-const STP_BFF_TIMEOUT_MS = Number.parseInt(
-  process.env.STP_BFF_TIMEOUT_MS ?? "9000",
-  10,
-);
+const STP_BFF_TIMEOUT_MS = (() => {
+  const raw = Number.parseInt(process.env.NEXT_PUBLIC_STP_BFF_TIMEOUT_MS ?? "9000", 10);
+  return Number.isFinite(raw) && raw > 0 ? raw : 9000;
+})();
 
 /** Whether the console is currently showing synthetic figures. Rendered as a badge. */
 export const DATA_SOURCE = {

@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -71,9 +72,8 @@ class EligibilityEmptyRulesFailClosedTest {
         SchemeRuleVersion row = new SchemeRuleVersion();
         row.scheme = "pre-matric";
         row.academicYear = "2026-27";
-        row.rulesJson = """
-            {"scheme": "pre-matric", "academic_year": "2026-27", "rules": []}
-            """;
+        row.rulesJson = Map.of("scheme", "pre-matric", "academic_year", "2026-27",
+            "rules", List.of());
         when(mirror.findBySchemeIgnoreCaseAndAcademicYear("pre-matric", "2026-27"))
             .thenReturn(Optional.of(row));
 

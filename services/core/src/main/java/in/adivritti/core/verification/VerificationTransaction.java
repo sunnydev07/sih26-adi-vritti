@@ -103,11 +103,20 @@ public class VerificationTransaction {
             throw new IllegalArgumentException("claimType is required");
         }
         String idempotencyKey = normalizedKey(req.idempotencyKey());
+        // A live row for this key replays; an EXPIRED row renews (see below).
+        // Without the liveness check a retry after the 365-day window returned
+        // "verified" with a validUntil in the past — while eligibility, which
+        // correctly ignores expired claims, reported missing_items for the same
+        // rule.
+        Claim renewal = null;
         if (idempotencyKey != null) {
             Optional<Claim> prior = claims.findFirstByUsidAndClaimTypeAndIdempotencyKey(
                 req.usid(), req.claimType(), idempotencyKey);
             if (prior.isPresent()) {
-                return replayResponse(prior.get());
+                if (isLive(prior.get())) {
+                    return replayResponse(prior.get());
+                }
+                renewal = prior.get();
             }
         }
 
@@ -128,7 +137,7 @@ public class VerificationTransaction {
             if (r.verified()) {
                 ZonedDateTime validUntil = ZonedDateTime.now().plusDays(CLAIM_VALIDITY_DAYS);
                 Claim claim = persistClaimIdempotent(req, strategy.tier(), r.confidence(),
-                    validUntil, r.value());
+                    validUntil, r.value(), renewal);
                 String verdict = strategy.tier().equals("gov_verified")
                     ? VERDICT_VERIFIED : strategy.tier();
                 return new VerifyResponse(claim.id, req.usid(), req.claimType(), verdict,
@@ -153,12 +162,27 @@ public class VerificationTransaction {
      * Wallet write that honours the caller key. A key that already produced a claim
      * for this scholar is caught earlier, by the pre-check in {@link #run}; this
      * handles the case where the row appeared between the pre-check and this write.
+     *
+     * <p>A {@code renewal} row (a live-expired claim for the same key, found by
+     * the pre-check) is updated in place instead of inserted: the unique index
+     * on (usid, claim_type, idempotency_key) would reject a second row for the
+     * same key, and there is deliberately no other renewal path in the model.
      */
     private Claim persistClaimIdempotent(VerifyRequest req, String tier, double confidence,
-        ZonedDateTime validUntil, String value) {
+        ZonedDateTime validUntil, String value, Claim renewal) {
         String key = normalizedKey(req.idempotencyKey());
         if (key == null) {
             return claims.save(newClaim(req, tier, confidence, validUntil, value));
+        }
+        if (renewal != null) {
+            renewal.method = tier;
+            renewal.source = tier;
+            renewal.confidence = confidence;
+            renewal.verifiedAt = ZonedDateTime.now();
+            renewal.validUntil = validUntil;
+            renewal.evidenceRef = req.evidenceRef();
+            renewal.valueEncrypted = sealedValue(value);
+            return claims.save(renewal);
         }
         try {
             // saveAndFlush, not save: save defers the INSERT (and therefore the
@@ -166,10 +190,38 @@ public class VerificationTransaction {
             // attributed to this attempt.
             return claims.saveAndFlush(newClaim(req, tier, confidence, validUntil, value));
         } catch (DataIntegrityViolationException race) {
+            if (!isIdempotencyCollision(race)) {
+                // Not the idempotency index — a foreign key, a CHECK, a genuine
+                // bug. Retrying would re-run the whole adapter chain only to fail
+                // identically (and mislabel the failure as a lost race), so let
+                // it surface now.
+                throw race;
+            }
             log.info("Verification id={} key={} lost the race for this wallet row; "
                 + "rolling back and replaying the winner's claim.", req.usid(), key);
             throw new ClaimKeyRaceException(key, race);
         }
+    }
+
+    /**
+     * Whether this violation is the idempotency index picking a winner, as
+     * opposed to any other integrity failure. Checks the Hibernate constraint
+     * name and, because not every driver surfaces one, the message text —
+     * PostgreSQL names the index in both.
+     */
+    static boolean isIdempotencyCollision(DataIntegrityViolationException e) {
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof org.hibernate.exception.ConstraintViolationException cve
+                && "uq_claim_idempotency".equalsIgnoreCase(cve.getConstraintName())) {
+                return true;
+            }
+            String message = t.getMessage();
+            if (message != null
+                && message.toLowerCase(java.util.Locale.ROOT).contains("uq_claim_idempotency")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Claim newClaim(VerifyRequest req, String tier, double confidence,
@@ -185,8 +237,17 @@ public class VerificationTransaction {
         c.evidenceRef = req.evidenceRef();
         c.verifier = "verification-orchestrator";
         c.idempotencyKey = normalizedKey(req.idempotencyKey());
-        c.valueEncrypted = cipher.seal(value == null || value.isBlank() ? VALUELESS : value);
+        c.valueEncrypted = sealedValue(value);
         return c;
+    }
+
+    private byte[] sealedValue(String value) {
+        return cipher.seal(value == null || value.isBlank() ? VALUELESS : value);
+    }
+
+    /** Live means usable by the rules engine: a validUntil in the future. */
+    static boolean isLive(Claim claim) {
+        return claim.validUntil != null && claim.validUntil.isAfter(ZonedDateTime.now());
     }
 
     /** Marker for a claim whose value the verification endpoint never received. */

@@ -51,7 +51,10 @@ public class CacheConfig implements CachingConfigurer {
             .cacheDefaults(base.entryTtl(ttls.defaultTtl()))
             .withCacheConfiguration("verification",
                 base.entryTtl(ttls.verification()))
-            .withCacheConfiguration("dashboard", base.entryTtl(ttls.dashboard()))
+            // No "dashboard" entry: no @Cacheable("dashboard") exists anywhere,
+            // and a pre-configured TTL here would silently become a cross-scholar
+            // key-collision bug the day someone wires it without scholar-scoped
+            // keys. Add the cache AND its key design together, not ahead.
             .transactionAware()
             .build();
         return manager;
@@ -135,13 +138,10 @@ public class CacheConfig implements CachingConfigurer {
     }
 
     /** Per-cache TTLs, bound once so the cache config stays declarative. */
-    public record RedisCacheTtls(Duration verification, Duration dashboard, Duration defaultTtl) {
+    public record RedisCacheTtls(Duration verification, Duration defaultTtl) {
         public RedisCacheTtls {
             if (verification.isNegative() || verification.isZero()) {
                 throw new IllegalArgumentException("verification TTL must be positive");
-            }
-            if (dashboard.isNegative() || dashboard.isZero()) {
-                throw new IllegalArgumentException("dashboard TTL must be positive");
             }
         }
     }
@@ -149,12 +149,9 @@ public class CacheConfig implements CachingConfigurer {
     @Bean
     RedisCacheTtls cacheTtls(
         @org.springframework.beans.factory.annotation.Value(
-            "${app.verification.cache-ttl-seconds:3600}") long verificationSeconds,
-        @org.springframework.beans.factory.annotation.Value(
-            "${app.verification.dashboard-cache-ttl-seconds:300}") long dashboardSeconds) {
+            "${app.verification.cache-ttl-seconds:3600}") long verificationSeconds) {
         return new RedisCacheTtls(
             Duration.ofSeconds(verificationSeconds),
-            Duration.ofSeconds(dashboardSeconds),
             Duration.ofMinutes(5));
     }
 }

@@ -48,6 +48,21 @@ def test_a_general_question_is_answered_from_the_faq_not_deflected():
         assert help_service.is_status_question(question) is False, question
 
 
+def test_a_general_usid_question_is_answered_not_deflected():
+    # "usid" was a word marker, so "what is usid" deflected to the status lane
+    # instead of reaching the USID faq. Possessive framing still deflects.
+    assert help_service.is_status_question("what is usid") is False
+    assert help_service.is_status_question("my usid record") is True
+    assert help_service.is_status_question("mera usid kya hai") is True
+
+
+def test_what_is_usid_reaches_the_faq():
+    body = help_service.answer("what is usid", "en")
+    assert body["lane"] == "help"
+    assert body["source"] == "faq"
+    assert "USID" in body["answer"]
+
+
 def test_an_english_question_is_not_misread_as_hindi():
     # "hai" is a substring of "Hawaii" and "chain", so these were answered in
     # Hindi. Word boundaries fix that without losing genuine Roman-Hindi.

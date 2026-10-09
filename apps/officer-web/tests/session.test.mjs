@@ -8,6 +8,7 @@ import {
   sessionSecret,
   signSession,
   usingDevSecret,
+  verifyRequestSession,
   verifySession,
 } from "../src/lib/session.ts";
 
@@ -144,4 +145,29 @@ test("a minted session stops verifying the moment it expires", async () => {
   const token = await mintSession("demo:9999999999", true, SECRET, 60, T0);
   assert.notEqual(await verifySession(token, SECRET, T0 + 59), null);
   assert.equal(await verifySession(token, SECRET, T0 + 61), null);
+});
+
+function cookieRequest(token) {
+  return {
+    cookies: {
+      get: (name) => (name === "adivritti_session" && token ? { value: token } : undefined),
+    },
+  };
+}
+
+test("verifyRequestSession accepts a signed cookie for the BFF proxies", async () => {
+  const env = { NODE_ENV: "production", OFFICER_SESSION_SECRET: SECRET };
+  const token = await mintSession("demo:9999999999", true, SECRET);
+  const claims = await verifyRequestSession(cookieRequest(token), env);
+  assert.equal(claims?.sub, "demo:9999999999");
+  assert.equal(claims?.role, "OFFICER");
+});
+
+test("verifyRequestSession rejects missing, forged, and secret-less requests", async () => {
+  const env = { NODE_ENV: "production", OFFICER_SESSION_SECRET: SECRET };
+  assert.equal(await verifyRequestSession(cookieRequest(undefined), env), null);
+  assert.equal(await verifyRequestSession(cookieRequest("adivritti_session=forged"), env), null);
+  // Production with no secret verifies nothing, even with a real token present.
+  const token = await mintSession("demo:9999999999", true, SECRET);
+  assert.equal(await verifyRequestSession(cookieRequest(token), PROD_ENV), null);
 });

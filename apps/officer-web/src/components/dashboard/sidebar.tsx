@@ -27,7 +27,7 @@ const NAV = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
-export function Sidebar() {
+export function Sidebar({ pendingReview }: { pendingReview?: number | null }) {
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
 
@@ -64,7 +64,7 @@ export function Sidebar() {
               {item.label}
               {item.label === "Exception Queue" ? (
                 <span className="ml-auto flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">
-                  <Bell size={11} aria-hidden /> 187
+                  <Bell size={11} aria-hidden /> {pendingReview?.toLocaleString("en-IN") ?? "…"}
                 </span>
               ) : null}
             </Link>
@@ -75,8 +75,11 @@ export function Sidebar() {
         <div className="flex items-center gap-3">
           <Avatar name="District Officer" />
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">R. Ekka</p>
-            <p className="text-xs text-[var(--muted-foreground)]">District Nodal · Mandla</p>
+            {/* Sample identity, labelled: the console session carries no
+                officer profile, so a personal name here would present sample
+                data as the signed-in user to every session. */}
+            <p className="truncate text-sm font-semibold">Demo Officer</p>
+            <p className="text-xs text-[var(--muted-foreground)]">Sample identity · demo console</p>
           </div>
         </div>
       </div>

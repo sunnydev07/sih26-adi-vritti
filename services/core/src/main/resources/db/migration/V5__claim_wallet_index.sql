@@ -1,0 +1,11 @@
+-- V5__claim_wallet_index.sql — the composite index V1's comment promises.
+--
+-- V1's comment says expiry filtering on the wallet's hot read path
+-- (findLiveByUsid / findLiveByUsidWithTypes: usid + validUntil > now ORDER BY
+-- verifiedAt DESC) is "backed by the (usid, valid_until) composite index
+-- above" — but the index created there is (claim_type, valid_until), and
+-- idx_claim_usid is usid-only. This migration adds the index the comment
+-- describes. It lives here, not in V1, because Flyway validates applied
+-- migrations by checksum: editing V1 would break validation on every database
+-- that already migrated.
+CREATE INDEX IF NOT EXISTS idx_claim_usid_valid ON claim(usid, valid_until);

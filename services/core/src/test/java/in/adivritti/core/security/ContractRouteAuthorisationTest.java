@@ -2,6 +2,7 @@ package in.adivritti.core.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
@@ -26,7 +27,9 @@ import in.adivritti.core.claims.ClaimsService;
 import in.adivritti.core.common.exception.GlobalExceptionHandler;
 import in.adivritti.core.config.SecurityConfig;
 import in.adivritti.core.consent.ConsentController;
+import in.adivritti.core.consent.ConsentGate;
 import in.adivritti.core.consent.ConsentService;
+import in.adivritti.core.consent.dto.ConsentDtos.AuditPage;
 import in.adivritti.core.disbursement.DisbursementController;
 import in.adivritti.core.disbursement.DisbursementService;
 import in.adivritti.core.eligibility.EligibilityController;
@@ -228,6 +231,14 @@ class ContractRouteAuthorisationTest {
         }
 
         @Bean
+        ConsentGate consentGate() {
+            // Void requireConsent does nothing: the gate allows, so the 200
+            // rows keep proving the handler runs (consent denial is covered
+            // by ConsentGateTest, not by this route table).
+            return mock(ConsentGate.class);
+        }
+
+        @Bean
         IdentityService identityService() {
             return mock(IdentityService.class);
         }
@@ -317,6 +328,12 @@ class ContractRouteAuthorisationTest {
         mvc = MockMvcBuilders.webAppContextSetup(context).apply(springSecurity()).build();
         when(applications.usidOf(APPLICATION_ID)).thenReturn(OWNER);
         when(consents.usidOf(CONSENT_ID)).thenReturn(OWNER);
+        // The audit controller re-wraps the service page with the 1-indexed
+        // request page; an unstubbed mock returns null and the handler NPEs
+        // into a 500, which would be indistinguishable from "the guard denied
+        // it" in the owner/officer rows above.
+        when(consents.audit(any(UUID.class), anyInt(), anyInt()))
+            .thenReturn(new AuditPage(List.of(), 0, 0, 20));
         // The exception queue orders by a risk computed in Java, so the controller
         // asks the repository for a bounded window. An unstubbed mock returns null
         // and the handler NPEs into a 500, which would be indistinguishable from

@@ -67,6 +67,35 @@ def _unavailable(reason: str) -> CoreUnavailableError:
     return CoreUnavailableError(reason)
 
 
+#: Longest single filter value forwarded to Core (query string on GET).
+_MAX_FILTER_CHARS = 256
+
+
+def _scalar_filters(params: dict) -> dict:
+    """Caller filters reduced to short scalars safe for a URL query string."""
+    flat: dict[str, str | int | float | bool] = {}
+    for key, value in params.items():
+        if value is None or key == "usid":
+            continue
+        if not isinstance(key, str) or len(key) > 64:
+            logger.warning("JAGO proxy dropping non-string filter key of length %d", len(str(key)))
+            continue
+        if isinstance(value, bool):
+            flat[key] = value
+        elif isinstance(value, (str, int, float)):
+            if len(str(value)) > _MAX_FILTER_CHARS:
+                logger.warning(
+                    "JAGO proxy dropping oversized filter %r (%d chars)", key, len(str(value))
+                )
+                continue
+            flat[key] = value
+        else:
+            logger.warning(
+                "JAGO proxy dropping non-scalar filter %r (%s)", key, type(value).__name__
+            )
+    return flat
+
+
 def _headers() -> dict[str, str]:
     # Core is JWT-protected. Without forwarding a credential every call 401s.
     headers = {"accept": "application/json"}
@@ -91,9 +120,11 @@ async def invoke(tool: str, usid: str, params: dict) -> dict:
     # `usid` is never taken from the caller: the tool is routed for a specific
     # scholar and the USID is already in the path, so a second, caller-supplied
     # one would either contradict the route or shadow it as a query parameter.
-    filters = {
-        k: v for k, v in (params or {}).items() if v is not None and k != "usid"
-    }
+    #
+    # Only scalars travel, and short ones: a nested dict used to be str()-ed
+    # into garbage like "?a={'b': 'c'}" on GET, and a megabyte string into a
+    # 414. Anything else is dropped (and logged) rather than forwarded.
+    filters = _scalar_filters(params or {})
     if method == "POST":
         json_body: dict | None = {**filters, "usid": usid}
         query: dict | None = None
@@ -113,8 +144,10 @@ async def invoke(tool: str, usid: str, params: dict) -> dict:
             f"Core timed out after {TIMEOUT_SECONDS}s calling {method} {path}"
         ) from e
     except httpx.HTTPError as e:
+        # Only the exception type is logged: str(e) routinely embeds the
+        # request headers, including the Core bearer credential.
         raise _unavailable(
-            f"Core is unreachable calling {method} {path}: {e}"
+            f"Core is unreachable calling {method} {path} ({type(e).__name__})"
         ) from e
 
     if r.status_code >= 400:

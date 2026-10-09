@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { plainClaimStatus, type PlainTone } from "@/lib/plain";
 import { slaStatus } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
@@ -26,16 +27,35 @@ export function RiskBar({ score }: { score: number }) {
   );
 }
 
+const TONE_BADGE: Record<PlainTone, "verified" | "pending" | "failed" | "review"> = {
+  ok: "verified",
+  warn: "pending",
+  bad: "failed",
+  info: "review",
+};
+
+const TONE_ICON: Record<PlainTone, string> = {
+  ok: "✅",
+  warn: "⏳",
+  bad: "❌",
+  info: "🔍",
+};
+
 export function ClaimRow({ label, status, detail }: { label: string; status: string; detail: string }) {
-  const icon = status === "gov-verified" ? "✅" : status === "pending-review" ? "⏳" : status === "expired" ? "❌" : "🔍";
+  // Render through the shared vocabulary, not the raw tier code: every tier
+  // except gov-verified/pending-review/expired used to fall into a violet
+  // "review" badge with its code string, so verified `corroborated` and
+  // `assisted` rows triaged as risky files needing review.
+  const words = plainClaimStatus(status);
+  const icon = TONE_ICON[words.tone];
   return (
     <div className="flex items-start gap-3 rounded-xl border border-[var(--border)] p-3">
       <span aria-hidden className="text-lg">{icon}</span>
       <div className="min-w-0">
         <p className="text-sm font-semibold">{label}</p>
-        <p className="text-xs text-[var(--muted-foreground)]">{detail}</p>
-        <Badge variant={status === "gov-verified" ? "verified" : status === "pending-review" ? "pending" : "review"} className="mt-1">
-          {status}
+        <p className="text-xs text-[var(--muted-foreground)]">{detail || words.detail}</p>
+        <Badge variant={TONE_BADGE[words.tone]} className="mt-1">
+          {words.words}
         </Badge>
       </div>
     </div>

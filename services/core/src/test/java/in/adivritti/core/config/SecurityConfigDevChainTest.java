@@ -37,6 +37,10 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 @SpringJUnitConfig(classes = {SecurityConfig.class, SecurityConfigDevChainTest.StubApi.class})
 @WebAppConfiguration
 @TestPropertySource(properties = {
+    // Exactly the dev profile and nothing else: the unauthenticated demo mode
+    // only opens there. (The flag alone must not open the API, which is what
+    // SecurityConfigNonDevFlagTest pins from the other side.)
+    "spring.profiles.active=dev",
     "app.security.allow-insecure-dev=true",
     // The value committed in application-dev.yml; reaching the assertions at all
     // proves the decoder accepts it.

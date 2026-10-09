@@ -61,6 +61,8 @@ export interface ChatMessage {
   card?: ChatCard;
   createdAt: string;
   queued?: boolean;
+  /** askAdi side-channel (offline mirror, consent block, ...); rendered as caption. */
+  notice?: "session-expired" | "consent-required" | "mirror-offline" | "lang-coming-soon";
 }
 
 export type SupportedLang = "en" | "hi" | "sat" | "gon";
@@ -70,4 +72,10 @@ export interface OutboxEntry {
   kind: "message" | "submission" | "consent";
   payload: Record<string, string>;
   createdAt: string;
+  /**
+   * Retry-safety key, minted at enqueue and replayed verbatim on every retry.
+   * Core's verify endpoint deduplicates on the caller key: without this, a
+   * retry after a lost response would mint a duplicate verification.
+   */
+  idempotencyKey: string;
 }

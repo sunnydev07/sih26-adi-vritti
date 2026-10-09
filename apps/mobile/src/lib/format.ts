@@ -1,7 +1,14 @@
 /** Money, dates, Aadhaar masking — identical semantics to officer-web lib/utils. */
 
 export function formatPaise(paise: number): string {
-  return `₹${(paise / 100).toLocaleString("en-IN")}`;
+  // Integer arithmetic on the paise value: float division prints ₹100.50 as
+  // "₹100.5" and loses exactness past 2^53, so split rupees/paise as integers
+  // and always show both paise digits.
+  const sign = paise < 0 ? "-" : "";
+  const abs = Math.abs(Math.trunc(paise));
+  const rupees = Math.floor(abs / 100);
+  const ps = abs % 100;
+  return `${sign}₹${rupees.toLocaleString("en-IN")}.${ps.toString().padStart(2, "0")}`;
 }
 
 export function formatPaiseCompact(paise: number): string {
@@ -9,7 +16,7 @@ export function formatPaiseCompact(paise: number): string {
   if (rupees >= 1e7) return `₹${(rupees / 1e7).toFixed(1)}Cr`;
   if (rupees >= 1e5) return `₹${(rupees / 1e5).toFixed(1)}L`;
   if (rupees >= 1e3) return `₹${(rupees / 1e3).toFixed(1)}K`;
-  return `₹${rupees.toLocaleString("en-IN")}`;
+  return formatPaise(paise);
 }
 
 export function maskAadhaar(ref: string): string {

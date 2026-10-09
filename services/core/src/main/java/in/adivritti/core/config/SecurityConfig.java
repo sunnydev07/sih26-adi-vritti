@@ -61,15 +61,22 @@ public class SecurityConfig {
 
     private final boolean allowInsecureDev;
     private final boolean devProfile;
+    private final boolean devOnlyProfile;
 
     public SecurityConfig(
         @Value("${app.security.allow-insecure-dev:false}") boolean allowInsecureDev,
         @Value("${spring.profiles.active:default}") String activeProfile) {
         this.allowInsecureDev = allowInsecureDev;
         // Comma-separated when several profiles are active ("dev,local").
-        this.devProfile = java.util.Arrays.stream(activeProfile.split(","))
+        java.util.List<String> profiles = java.util.Arrays.stream(activeProfile.split(","))
             .map(String::trim)
-            .anyMatch("dev"::equals);
+            .filter(s -> !s.isEmpty())
+            .toList();
+        this.devProfile = profiles.contains("dev");
+        // The unauthenticated demo mode is only meaningful as the whole posture:
+        // exactly the dev profile and nothing else. "prod,dev" still loads the
+        // committed dev constants, so the flag must not open the API there either.
+        this.devOnlyProfile = profiles.size() == 1 && profiles.contains("dev");
     }
 
     /**
@@ -120,11 +127,17 @@ public class SecurityConfig {
                     auth.requestMatchers("/v3/api-docs", "/v3/api-docs/**")
                         .hasAnyRole(OFFICER_ROLE, ADMIN_ROLE);
                 }
-                if (allowInsecureDev) {
+                if (allowInsecureDev && devOnlyProfile) {
                     log.warn("SECURITY: app.security.allow-insecure-dev=true — every /v1 endpoint is "
                         + "UNAUTHENTICATED. This is for local demos only.");
                     auth.anyRequest().permitAll();
                 } else {
+                    if (allowInsecureDev) {
+                        log.warn("SECURITY: app.security.allow-insecure-dev=true is IGNORED "
+                            + "because the active profiles are not exactly {dev} — every /v1 "
+                            + "endpoint stays authenticated. The demo escape hatch only opens "
+                            + "under the dev profile.");
+                    }
                     auth.requestMatchers("/v1/admin/**").hasAnyRole(OFFICER_ROLE, ADMIN_ROLE)
                         .anyRequest().authenticated();
                 }

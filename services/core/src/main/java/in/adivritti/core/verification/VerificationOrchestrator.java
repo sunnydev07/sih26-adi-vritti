@@ -55,6 +55,13 @@ public class VerificationOrchestrator {
      * the key, a cache hit means this exact verification already ran and its claim is
      * already in the wallet — which is what makes skipping the write on a hit safe.
      *
+     * <p>The key carries a null discriminator for {@code evidenceRef}:
+     * {@code String.valueOf((Object) null)} is the four-character string
+     * {@code "null"}, so a missing ref and a document literally named "null"
+     * shared one cache entry — the second verification was answered from the
+     * first document's verdict and its claim was never written. The boolean
+     * segment keeps them apart for every possible ref value.
+     *
      * <p>The contract's {@code idempotencyKey} is honoured on top of the cache: a key
      * that already produced a claim for this scholar and claim type short-circuits
      * to a replay of that claim (same claim id, verdict, confidence, validity; empty provenance
@@ -65,7 +72,7 @@ public class VerificationOrchestrator {
     @Cacheable(
         value = "verification",
         key = "T(String).valueOf(#req.usid()) + ':' + T(String).valueOf(#req.claimType())"
-            + " + ':' + T(String).valueOf(#req.evidenceRef())",
+            + " + ':' + (#req.evidenceRef() == null) + ':' + T(String).valueOf(#req.evidenceRef())",
         unless = "#result == null || #result.verdict() == 'failed' || #result.verdict() == 'pending_review'")
     public VerifyResponse verify(VerifyRequest req) {
         try {

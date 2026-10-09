@@ -191,9 +191,23 @@ class VerificationCacheBehaviourTest {
     }
 
     @Test
+    @DisplayName("a missing evidence ref and a document literally named \"null\" do not collide")
+    void nullAndLiteralNullEvidenceDoNotCollide() {
+        // String.valueOf((Object) null) is "null", so without a null
+        // discriminator the two requests shared one cache entry: the second
+        // verification was answered from the first document's verdict and its
+        // claim was never written.
+        orchestrator.verify(new VerifyRequest(USID, "income", null, null));
+        strategy.calls.set(0);
+
+        orchestrator.verify(new VerifyRequest(USID, "income", "null", null));
+
+        assertThat(strategy.calls).hasValue(1);
+    }
+
+    @Test
     @DisplayName("a failed verdict is transient and is never cached")
-    void failedVerdictsAreNotCached() {
-        strategy.verified = false;
+    void failedVerdictsAreNotCached() {        strategy.verified = false;
         VerifyRequest request = new VerifyRequest(USID, "income", "digilocker/doc-3", null);
 
         assertThat(orchestrator.verify(request).verdict()).isEqualTo("failed");

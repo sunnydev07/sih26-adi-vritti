@@ -19,10 +19,21 @@ import { mockDashboard } from "@/lib/jago";
 
 /** Single application timeline. Mock-driven; wire to GET /v1/applications/{id}/timeline in integration. */
 export default function ApplicationDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { t } = useLang();
+  // Deep links can carry repeated params (string[]); the lookup below would
+  // otherwise miss and show "not found" for a file that exists.
+  const rawId = params.id;
+  const id = Array.isArray(rawId) ? rawId[0] : rawId;
   const app = mockDashboard.applications.find((a) => a.id === id);
+
+  // A cold deep link has no navigation history: bare router.back() visibly
+  // does nothing on a dead-end screen, so fall back to Home.
+  function goBack() {
+    if (router.canGoBack()) router.back();
+    else router.replace("/");
+  }
 
   if (!app) {
     return (
@@ -34,7 +45,7 @@ export default function ApplicationDetailScreen() {
           {t.appNotFoundSub}
         </Tx>
         <View style={{ marginTop: 16 }}>
-          <PrimaryButton title={t.appGoBack} icon="arrow-back" onPress={() => router.back()} />
+          <PrimaryButton title={t.appGoBack} icon="arrow-back" onPress={goBack} />
         </View>
       </View>
     );
@@ -47,7 +58,7 @@ export default function ApplicationDetailScreen() {
     <ScrollView style={{ flex: 1, backgroundColor: colors.page }}>
       <View style={{ padding: 16, paddingTop: 60, paddingBottom: 40 }}>
         <PressableScale
-          onPress={() => router.back()}
+          onPress={goBack}
           accessibilityLabel={t.appBack}
           style={{ alignSelf: "flex-start", padding: 6 }}
         >

@@ -7,7 +7,11 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.ZonedDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
  * Versioned mirror of {@code packages/rules/} (ADR-001).
@@ -34,9 +38,15 @@ public class SchemeRuleVersion {
     @Column(name = "academic_year", nullable = false, length = 8)
     public String academicYear;
 
-    /** Full validated rule-file document (JSON). */
+    /**
+     * Full validated rule-file document (JSON). A structured map with the JSON
+     * type code, not a String: {@code columnDefinition} only affects DDL, while
+     * a String field binds a VARCHAR that PostgreSQL rejects for a jsonb column
+     * — which broke the mirror write on every boot.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "rules_json", nullable = false, columnDefinition = "jsonb")
-    public String rulesJson;
+    public Map<String, Object> rulesJson = new LinkedHashMap<>();
 
     @Column(name = "created_at", nullable = false)
     public ZonedDateTime createdAt = ZonedDateTime.now();

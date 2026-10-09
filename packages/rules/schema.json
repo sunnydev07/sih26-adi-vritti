@@ -10,17 +10,23 @@
     "category": { "type": "string", "enum": ["welfare", "merit"] },
     "ministry": { "type": "string" },
     "portal": { "type": "string" },
-    "rules": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["claim", "op", "onFail"],
-        "properties": {
-          "claim": { "type": "string" },
-          "op": { "type": "string", "enum": ["in", "lte", "gte", "eq", "exists"] },
-          "value": {},
-          "onFail": { "type": "string" }
+      "rules": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "required": ["claim", "op", "onFail"],
+          "properties": {
+            "claim": { "type": "string" },
+            "op": { "type": "string", "enum": ["in", "lte", "gte", "eq", "exists", "not_null"] },
+            "value": {},
+            "onFail": { "type": "string" }
+          },
+          "anyOf": [
+            { "properties": { "op": { "enum": ["exists", "not_null"] } } },
+            { "required": ["value"] }
+          ]
         }
+      }
       }
     },
     "award": { "type": "object" }

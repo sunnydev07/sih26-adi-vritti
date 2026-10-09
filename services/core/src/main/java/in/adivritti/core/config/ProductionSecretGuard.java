@@ -10,36 +10,38 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 /**
- * Refuses to boot the {@code prod} profile while any security-relevant secret is
+ * Refuses to boot on any non-dev profile while a security-relevant secret is
  * still a value published in this repository.
  *
  * <p>The dev profile deliberately commits its secrets — that is what makes
  * {@code make dev} work with no setup step — and every one of them is a constant
  * in {@code application-dev.yml} and {@code infra/docker-compose.yml}. The failure
- * mode this guards against is a deployment that sets {@code SPRING_PROFILES_ACTIVE}
- * to something other than {@code prod} (or forgets to set it at all) and inherits
- * those constants: {@code allow-insecure-dev=true} then turns the whole API into
+ * mode this guards against is a deployment that does NOT run the dev profile
+ * (staging, a custom profile, or no profile at all) yet inherits those constants:
+ * {@code allow-insecure-dev=true} would then turn the whole API into
  * {@code anyRequest().permitAll()}, and the Aadhaar vault HMAC key, the claim
- * AES key, the JWT secret and the AI service token are all public values that
- * anyone who has read the repo can use to decrypt the wallet or forge a token.
+ * AES key, the JWT secret and the AI service token would all be public values
+ * that anyone who has read the repo can use to decrypt the wallet or forge a
+ * token.
  *
  * <p>It runs from {@link #check()} during context refresh, so the process dies
  * with this message rather than coming up and serving traffic:
  *
  * <pre>
- *   *** REFUSING TO START: prod profile is using development secrets ***
+ *   *** REFUSING TO START: non-dev profile is using development secrets ***
  *     - app.aadhaar.vault-hmac-key still holds the committed development value
  *     ...
  * </pre>
  *
- * <p>Deliberately scoped to the {@code prod} profile only. Staging and CI keep the
- * dev profile (documented in {@code docs/openapi/core.yaml}-adjacent specs as a
- * known risk) because failing them would be a surprise with no security gain; the
- * operator has to opt into {@code prod} explicitly, and that opt-in is the point at
- * which the check applies.
+ * <p>Scoped to every profile EXCEPT {@code dev} ({@code @Profile("!dev")}). The
+ * dev profile is the one deployment that is allowed to run on the committed
+ * constants, and {@link SecurityConfig} additionally refuses to open its
+ * unauthenticated demo mode unless the active profiles are exactly
+ * {@code {dev}} — so a production box that accidentally boots the dev stack
+ * file stays a loud, deliberate choice rather than a silent default.
  */
 @Component
-@Profile("prod")
+@Profile("!dev")
 public class ProductionSecretGuard {
 
     /** base64("dev-only-hmac-key-32-bytes-long!") — application-dev.yml */
@@ -104,10 +106,10 @@ public class ProductionSecretGuard {
         if (problems.isEmpty()) return;
 
         throw new IllegalStateException(
-            "*** REFUSING TO START: prod profile is using development secrets ***\n"
+            "*** REFUSING TO START: non-dev profile is using development secrets ***\n"
                 + problems.stream().map(p -> "  - " + p).collect(java.util.stream.Collectors.joining("\n"))
-                + "\nSet each value from the deployment's secret store, or run with a "
-                + "non-prod profile for local demos. The committed values are in "
+                + "\nSet each value from the deployment's secret store, or run with the "
+                + "dev profile for local demos. The committed values are in "
                 + "services/core/src/main/resources/application-dev.yml and "
                 + "infra/docker-compose.yml.");
     }

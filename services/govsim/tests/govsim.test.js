@@ -141,29 +141,21 @@ test('NOS date formats rotate per page', async () => {
   assert.strictEqual(wrapped.json.selection_date, '17/08/2024');
 });
 
-test('NOS records survives page=0, page=-1 and a non-numeric page', async () => {
-  // A government portal with a hand-typed query string. The mock must answer,
-  // not throw -- an adapter that 500s on `?page=abc` is the bug, not the mock.
-  // Current behaviour, which the assertions pin:
-  //   page=0     -> NOS_DATES[-1]  -> out of range, selection_date omitted
-  //   page=-1    -> NOS_DATES[-2]  -> out of range, selection_date omitted
-  //   page=abc   -> parseInt gives NaN, and JSON.stringify(NaN) is null
-  const cases = [
-    { query: '?page=0', page: 0 },
-    { query: '?page=-1', page: -1 },
-    { query: '?page=abc', page: null },
-  ];
-  for (const { query, page } of cases) {
+test('NOS records rejects a non-positive or non-numeric page with a 400', async () => {
+  // A government portal with a hand-typed query string. The mock answers with
+  // an invariant shape: page=0/-1/abc used to answer 200 with selection_date
+  // silently dropped and page nulled, so a parser expecting the documented
+  // shape branched three ways. Fixed per the test's own note.
+  for (const query of ['?page=0', '?page=-1', '?page=abc']) {
     const res = await get(`/nos/records${query}`);
-    assert.strictEqual(res.status, 200, `${query} should answer 200, got ${res.status}`);
-    assert.notStrictEqual(res.json, null, `${query} returned unparseable JSON: ${res.text}`);
-    assert.strictEqual(res.json.system, 'NOS');
-    assert.strictEqual(res.json.page, page);
-    assert.ok(Array.isArray(res.json.records) && res.json.records.length > 0,
-      `${query} returned no records`);
-    assert.ok(!('selection_date' in res.json),
-      `${query} unexpectedly produced a selection_date; update this test if that is fixed`);
+    assert.strictEqual(res.status, 400, `${query} should answer 400, got ${res.status}`);
+    assert.strictEqual(res.json.error, 'bad_request');
   }
+  // Valid pages are unchanged.
+  const first = await get('/nos/records?page=1');
+  assert.strictEqual(first.status, 200);
+  assert.strictEqual(first.json.selection_date, '17/08/2024');
+  assert.strictEqual(first.json.page, 1);
 });
 
 test('PFMS taxonomy covers all six codes', async () => {
@@ -184,12 +176,32 @@ test('PFMS taxonomy covers all six codes', async () => {
   }
 });
 
+test('PFMS status is stable per payment reference', async () => {
+  // Repeated polls for the same payment used to cycle through the taxonomy,
+  // so the DBT-Doctor narrative changed between identical calls. Same ref,
+  // same answer, every call; the demo reference is pinned to E001.
+  const demo = await get('/pfms/status?pfms_ref=PFMS-9988776655');
+  assert.strictEqual(demo.json.pfms_ref, 'PFMS-9988776655');
+  assert.strictEqual(demo.json.failure_code, 'E001_AADHAAR_NOT_SEEDED');
+  assert.strictEqual(demo.json.status, 'failed');
+  for (let i = 0; i < 3; i += 1) {
+    const again = await get('/pfms/status?pfms_ref=REF-STABLE-1');
+    assert.strictEqual(again.json.failure_code,
+      (await get('/pfms/status?pfms_ref=REF-STABLE-1')).json.failure_code,
+      'same ref gave different codes across polls');
+  }
+  const def = await get('/pfms/status');
+  assert.strictEqual(def.json.pfms_ref, 'PFMS-9988776655');
+  assert.strictEqual(def.json.failure_code, 'E001_AADHAAR_NOT_SEEDED');
+});
+
 test('verify outcomes are deterministic per USID and the demo student always passes', async () => {
   // Verify DECISIONS are a pure function of the USID (stable hash in
   // src/index.js), while transport chaos stays random. Same USID, same
   // answer, every call -- this is what makes the demo reproducible.
   const demo = '11111111-1111-4111-8111-111111111111';
-  const paths = ['/nsp/verify', '/sfmp/verify', '/nos/verify', '/ugc-nta/verify', '/digilocker/verify'];
+  const paths = ['/nsp/verify', '/sfmp/verify', '/nos/verify', '/ugc-nta/verify', '/digilocker/verify',
+    '/udise/verify', '/pfms/verify'];
   for (const path of paths) {
     const first = await get(`${path}?usid=${demo}`);
     assert.strictEqual(first.status, 200);
@@ -221,6 +233,24 @@ test('digilocker has a genuine, stable rejection path', async () => {
   assert.strictEqual(rejected.body.reason_code, 'DOCUMENT_MISMATCH');
   const again = await get(`/digilocker/verify?usid=${rejected.usid}`);
   assert.strictEqual(again.json.verified, false, 'rejection must be stable across calls');
+});
+
+test('udise and pfms have genuine, stable rejection paths', async () => {
+  // Both used to rubber-stamp verified:true, so the corroboration tier and
+  // the failures-become-deficiencies flow were untestable through them. Now
+  // ~1 in 10 non-demo USIDs is rejected, deterministically.
+  for (const path of ['/udise/verify', '/pfms/verify']) {
+    let rejected = null;
+    for (let i = 0; i < 200 && rejected === null; i += 1) {
+      const usid = `rej-probe-${i}-0000-4000-8000-000000000000`;
+      const res = await get(`${path}?usid=${usid}`);
+      assert.strictEqual(res.status, 200);
+      if (res.json.verified === false) rejected = { usid, body: res.json };
+    }
+    assert.ok(rejected, `expected a rejected USID on ${path} within 200 deterministic draws`);
+    const again = await get(`${path}?usid=${rejected.usid}`);
+    assert.strictEqual(again.json.verified, false, `${path} rejection must be stable across calls`);
+  }
 });
 
 test('digilocker verify carries deterministic document fields on success', async () => {

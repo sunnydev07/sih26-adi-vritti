@@ -1,4 +1,4 @@
-from app.config import settings
+from app.config import DEV_SALT, settings
 from app.models.schemas import GapQuery
 from app.security import require_service_token
 from app.services import gap_service
@@ -21,8 +21,18 @@ def hash_key(
     # hashed keys cross the wire, so no raw reference is ever shared. The token
     # gate on this route matters precisely because the request body here *is* a
     # raw reference.
-    if not settings.gap_hmac_salt.strip():
-        raise HTTPException(status_code=503, detail="GAP_HMAC_SALT is not configured")
+    #
+    # The salt gets the same fail-closed treatment as the token: serving under
+    # the published dev default returns deterministic hashes anyone can
+    # rainbow-table, so a blank or published salt is a 503 unless the local
+    # demo opt-in is explicitly set.
+    salt = settings.gap_hmac_salt.strip()
+    if not salt or (salt == DEV_SALT and not settings.allow_insecure_dev):
+        raise HTTPException(
+            status_code=503,
+            detail="GAP_HMAC_SALT is blank or still the published development value. "
+            "Set a real rotated salt, or set ALLOW_INSECURE_DEV=true for a local demo only.",
+        )
     return {"hashed_key": gap_service.hashed_key(req.aadhaar_ref, settings.gap_hmac_salt)}
 
 

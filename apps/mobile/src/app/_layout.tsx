@@ -7,9 +7,10 @@ import {
   useFonts,
 } from "@expo-google-fonts/plus-jakarta-sans";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
-import { Slot } from "expo-router";
+import { useEffect, type ReactNode } from "react";
+import { Slot, useRouter, useSegments } from "expo-router";
 import { LangProvider } from "@/lib/lang";
+import { useSession } from "@/lib/session";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -32,7 +33,28 @@ export default function RootLayout() {
   if (!loaded && !error) return null;
   return (
     <LangProvider>
-      <Slot />
+      <SessionGate>
+        <Slot />
+      </SessionGate>
     </LangProvider>
   );
+}
+
+/**
+ * Cold starts and deep links land inside the tabs today with zero credentials:
+ * the login screen was reachable but never enforced. Any gated route without
+ * a session redirects to /login instead.
+ */
+function SessionGate({ children }: { children: ReactNode }) {
+  const session = useSession();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!session && segments[0] !== "(auth)") {
+      router.replace("/login");
+    }
+  }, [session, segments, router]);
+
+  return <>{children}</>;
 }

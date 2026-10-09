@@ -29,7 +29,13 @@ export async function proxy(request: NextRequest) {
 
   if (secret) {
     const claims = await verifySession(session?.value, secret);
-    if (claims) return NextResponse.next();
+    if (claims) {
+      // Authenticated HTML must never be served from cache: after a sign-out
+      // or an expiry the back button must not resurrect the console shell.
+      const ok = NextResponse.next();
+      ok.headers.set("Cache-Control", "no-store");
+      return ok;
+    }
   }
 
   const url = request.nextUrl.clone();

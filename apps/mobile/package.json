@@ -10,7 +10,7 @@
     "serve": "npx serve dist",
     "android": "expo run:android",
     "lint": "tsc --noEmit",
-    "sync:tokens": "xcopy ..\\..\\packages\\ui-tokens vendor\\ui-tokens /E /I /Y",
+    "sync:tokens": "node scripts/sync-tokens.js",
     "ios": "expo run:ios"
   },
   "dependencies": {

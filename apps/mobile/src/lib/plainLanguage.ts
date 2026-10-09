@@ -56,8 +56,18 @@ export interface ClaimWords {
   detail: string;
 }
 
+/**
+ * App display states ("valid") are older than the token table, whose keys are
+ * verifier tiers ("gov-verified"). Resolve through the alias map so a verified
+ * document reads "Verified" instead of echoing the internal enum word — and so
+ * a raw contract tier passed straight through still renders correctly.
+ */
+const STATUS_ALIASES: Record<string, string> = {
+  valid: "gov-verified",
+};
+
 export function claimWords(status: string): ClaimWords {
-  const entry = tokens.claimStatus[status];
+  const entry = tokens.claimStatus[STATUS_ALIASES[status] ?? status];
   if (!entry) return { tone: "info", words: status, detail: "" };
   return { tone: entry.tone, words: entry.words, detail: entry.detail };
 }

@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { MotiView } from "moti";
 import { useRef, useState } from "react";
 import {
+  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -12,7 +13,9 @@ import {
   View,
 } from "react-native";
 import { PressableScale, Tx, TypingDots, shadow } from "@/components/ui";
-import { answerLocal, askAdi } from "@/lib/assistant";
+import { answerLocal, askAdi, type AdiNotice } from "@/lib/assistant";
+import { signOut } from "@/lib/session";
+import { newId } from "@/lib/store";
 import { assistantSuggestions, colors, radius } from "@/lib/theme";
 import type { ChatMessage, SupportedLang } from "@/types";
 
@@ -35,6 +38,22 @@ function statusCard(): ChatMessage["card"] {
   };
 }
 
+/** Machine-readable side-channel captions (askAdi `notice`). */
+function noticeCaption(notice: AdiNotice, hi: boolean): string | null {
+  switch (notice) {
+    case "mirror-offline":
+      return hi
+        ? "ऑफ़लाइन प्रति — केवल सामान्य उत्तर"
+        : "Offline mirror — general answers only";
+    case "lang-coming-soon":
+      return hi
+        ? "संथाली/गोंडी उत्तर जल्द आ रहे हैं — अभी अंग्रेज़ी में"
+        : "Santali/Gondi answers coming soon — showing English for now";
+    default:
+      return null;
+  }
+}
+
 export default function ChatScreen() {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -45,13 +64,13 @@ export default function ChatScreen() {
   const [lang, setLang] = useState<SupportedLang>("hi");
   const [chips, setChips] = useState<string[]>(assistantSuggestions);
   const [sending, setSending] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlatList<ChatMessage>>(null);
 
   async function sendText(text: string) {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
     const user: ChatMessage = {
-      id: `u-${Date.now()}`,
+      id: newId("u"),
       role: "user",
       text: trimmed,
       createdAt: new Date().toISOString(),
@@ -61,16 +80,24 @@ export default function ChatScreen() {
     setSending(true);
     // Online-first (AI /jago/help), offline-proof (local mirror for WIFI-OFF demo).
     const ans = await askAdi(trimmed, lang);
+    setSending(false);
+    if (ans.notice === "session-expired") {
+      // The BFF said 401: the session is dead, so leave — staying would loop
+      // every further question through the same expired credential.
+      signOut();
+      router.replace("/login");
+      return;
+    }
     const reply: ChatMessage = {
-      id: `j-${Date.now()}`,
+      id: newId("j"),
       role: "jago",
       text: ans.text,
       card: ans.lane === "status" ? statusCard() : undefined,
+      notice: ans.notice,
       createdAt: new Date().toISOString(),
     };
     setMessages((m) => [...m, reply]);
     setChips(ans.suggestions.length > 0 ? ans.suggestions : assistantSuggestions);
-    setSending(false);
   }
 
   function send() {
@@ -161,16 +188,39 @@ export default function ChatScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <ScrollView
-          ref={scrollRef}
+        {/* FlatList, not ScrollView: every message used to mount an animated
+            view forever, so a long JAGO session grew memory without bound on
+            low-end devices. */}
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(m) => m.id}
           style={{ flex: 1 }}
           contentContainerStyle={{ padding: 16, paddingBottom: 8 }}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
-        >
-          {messages.map((m) =>
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+          removeClippedSubviews
+          maxToRenderPerBatch={10}
+          windowSize={11}
+          ListFooterComponent={
+            sending ? (
+              <View
+                style={{
+                  alignSelf: "flex-start",
+                  backgroundColor: "#fff",
+                  borderRadius: 18,
+                  borderTopLeftRadius: 6,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  marginBottom: 8,
+                }}
+              >
+                <TypingDots />
+              </View>
+            ) : null
+          }
+          renderItem={({ item: m }) =>
             m.role === "user" ? (
               <MotiView
-                key={m.id}
                 from={{ opacity: 0, translateY: 10, scale: 0.98 }}
                 animate={{ opacity: 1, translateY: 0, scale: 1 }}
                 transition={{ type: "spring", damping: 20, stiffness: 320 }}
@@ -191,7 +241,6 @@ export default function ChatScreen() {
               </MotiView>
             ) : (
               <MotiView
-                key={m.id}
                 from={{ opacity: 0, translateY: 10, scale: 0.98 }}
                 animate={{ opacity: 1, translateY: 0, scale: 1 }}
                 transition={{ type: "spring", damping: 20, stiffness: 320 }}
@@ -200,6 +249,11 @@ export default function ChatScreen() {
                 <Tx variant="tiny" weight="extrabold" color={colors.primarySoft} style={{ marginBottom: 3 }}>
                   ADI
                 </Tx>
+                {m.notice && noticeCaption(m.notice, lang === "hi") ? (
+                  <Tx variant="tiny" color={colors.muted} style={{ marginBottom: 3 }}>
+                    {noticeCaption(m.notice, lang === "hi")}
+                  </Tx>
+                ) : null}
                 <View
                   style={[
                     {
@@ -239,24 +293,9 @@ export default function ChatScreen() {
                   ) : null}
                 </View>
               </MotiView>
-            ),
-          )}
-          {sending ? (
-            <View
-              style={{
-                alignSelf: "flex-start",
-                backgroundColor: "#fff",
-                borderRadius: 18,
-                borderTopLeftRadius: 6,
-                borderWidth: 1,
-                borderColor: colors.border,
-                marginBottom: 8,
-              }}
-            >
-              <TypingDots />
-            </View>
-          ) : null}
-        </ScrollView>
+            )
+          }
+        />
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 48 }}>
           <View style={{ flexDirection: "row", gap: 6, paddingHorizontal: 14, paddingVertical: 6 }}>

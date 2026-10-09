@@ -18,6 +18,7 @@ export const STRINGS = {
     loginTagline: "One student. One identity. Five schemes.",
     loginMobileLabel: "Mobile number",
     loginSendOtp: "Send OTP",
+    loginPreviewDemo: "Preview demo →",
     loginDemoNote: "Demo build — enter any 10-digit number to preview. No OTP is sent in any environment.",
 
     homeEyebrow: "Adi-Vritti · Student",
@@ -102,6 +103,7 @@ export const STRINGS = {
     loginTagline: "एक विद्यार्थी। एक पहचान। पाँच योजनाएँ।",
     loginMobileLabel: "मोबाइल नंबर",
     loginSendOtp: "OTP भेजें",
+    loginPreviewDemo: "डेमो देखें →",
     loginDemoNote: "डेमो बिल्ड — झलक के लिए कोई भी 10 अंकों का नंबर डालें। किसी भी माहौल में OTP नहीं भेजा जाता।",
 
     homeEyebrow: "आदि-वृत्ति · छात्रा",

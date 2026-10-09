@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/controls";
 import { api } from "@/lib/api";
 import { coverageColor, coveragePct } from "@/lib/coverage";
+import { dashboardMetrics } from "@/__mocks__/data";
 import type { CoverageRegion } from "@/types";
 
 const LEVEL_LABEL: Record<CoverageRegion["level"], string> = {
@@ -56,6 +57,18 @@ export default function CoverageGapPage() {
 
   const level: CoverageRegion["level"] =
     children[0]?.level ?? (trail.length === 0 ? "state" : "school");
+  const atDeepest = !loading && !failed && children.length === 0;
+
+  // Outreach rows carry a district, not a state: once the drill reaches a
+  // district, show only its schools (drilling to Mandla while listing Bastar
+  // got a warden called in the wrong district). Above district level the list
+  // is explicitly unfiltered.
+  const trailDistrict = [...trail].reverse().find((t) => t.level === "district")?.name ?? null;
+  const visibleOutreach = trailDistrict ? outreach.filter((o) => o.district === trailDistrict) : outreach;
+
+  // Derived from the same seam as the overview hero, not hand-copied: a mock
+  // edit used to leave this hero stale.
+  const missingStudents = Math.max(0, dashboardMetrics.totalStudents - dashboardMetrics.totalApplied);
 
   function drill(region: CoverageRegion) {
     if (region.level === "school") {
@@ -65,16 +78,27 @@ export default function CoverageGapPage() {
     navigate([...trail, region]);
   }
 
+  /** CSV-escape a cell: quote when needed, neutralise formula injection, strip newlines. */
+  function csvCell(value: string | number): string {
+    let text = String(value).replace(/[\r\n]+/g, " ").replace(/"/g, '""');
+    if (/^[=+\-@]/.test(text)) text = `'${text}`;
+    return /[",]/.test(text) || text.startsWith("'") ? `"${text}"` : text;
+  }
+
   function exportCsv() {
     // The rows are synthetic (demo console): mark the file itself, so a
     // forwarded CSV cannot be mistaken for an official extract.
-    const rows = ["# Adi-Vritti coverage-gap outreach — DEMO DATA, synthetic figures, not official", "school,district,class,st_students,applications", ...outreach.map((o) => `"${o.schoolName}","${o.district}","${o.classLevel}",${o.stStudents},${o.applications}`)];
+    const header = "# Adi-Vritti coverage-gap outreach — DEMO DATA, synthetic figures, not official";
+    const rows = [header, "school,district,class,st_students,applications", ...visibleOutreach.map((o) => [o.schoolName, o.district, o.classLevel, o.stStudents, o.applications].map(csvCell).join(","))];
     const blob = new Blob([rows.join("\n")], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = "coverage-gap-outreach.csv";
+    // Attached before click: a detached anchor click is ignored on Safari.
+    document.body.appendChild(a);
     a.click();
+    a.remove();
     URL.revokeObjectURL(url);
     toast("Demo outreach list exported — synthetic figures, not official.");
   }
@@ -99,7 +123,7 @@ export default function CoverageGapPage() {
               </span>
             ))}
           </nav>
-          <h2 className="font-display text-base font-bold">{LEVEL_LABEL[level]} · tap to drill down</h2>
+          <h2 className="font-display text-base font-bold">{atDeepest ? "Schools · deepest level — act via outreach" : `${LEVEL_LABEL[level]} · tap to drill down`}</h2>
           {loading ? (
             <p className="py-8 text-center text-sm text-[var(--muted-foreground)]">Loading regions…</p>
           ) : failed ? (
@@ -174,8 +198,11 @@ export default function CoverageGapPage() {
               <Download size={13} aria-hidden /> CSV
             </button>
           </div>
+          <p className="mb-2 text-xs text-[var(--muted-foreground)]">
+            {trailDistrict ? `Showing ${trailDistrict} district` : "All states (unfiltered)"}
+          </p>
           <div id="outreach-list" className="scroll-mt-24 space-y-2.5">
-            {outreach.map((o) => (
+            {visibleOutreach.map((o) => (
               <div key={o.id} className="rounded-xl border border-[var(--border)] p-3 text-sm">
                 <p className="flex items-start gap-1.5 font-semibold">
                   <MapPin size={14} aria-hidden className="mt-0.5 shrink-0 text-[#4338CA]" />
@@ -196,7 +223,7 @@ export default function CoverageGapPage() {
           <div>
             <p className="text-xs uppercase tracking-widest text-[var(--muted-foreground)]">Students missing</p>
             <p className="text-2xl font-bold text-amber-600">
-              <NumberTicker value={1090000} format={(n) => Math.round(n).toLocaleString("en-IN")} />
+              <NumberTicker value={missingStudents} format={(n) => Math.round(n).toLocaleString("en-IN")} />
             </p>
           </div>
         </GlassCard>

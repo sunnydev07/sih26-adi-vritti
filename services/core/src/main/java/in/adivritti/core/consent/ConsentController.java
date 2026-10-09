@@ -48,13 +48,17 @@ public class ConsentController {
         return ResponseEntity.ok(service.revoke(id));
     }
 
-    /** The access audit is the DPDP "who looked at my data" record — officer-only. */
+    /** The access audit is the DPDP "who looked at my data" record — owner or officer. */
     @GetMapping("/v1/scholars/{usid}/audit")
     ResponseEntity<AuditPage> audit(@PathVariable UUID usid,
         @RequestParam(name = "page", defaultValue = "1") @Min(1) int page,
         @RequestParam(name = "page_size", defaultValue = "20") @Min(1) @Max(100) int pageSize) {
         access.check(usid);
-        // Service pages are 0-indexed; the contract is 1-indexed.
-        return ResponseEntity.ok(service.audit(usid, page - 1, pageSize));
+        // Service pages are 0-indexed; the contract is 1-indexed. Echo the
+        // request's page like the exception queue does: returning the 0-based
+        // number made clients feed page 0 back in (400) or re-read page 1 forever.
+        AuditPage result = service.audit(usid, page - 1, pageSize);
+        return ResponseEntity.ok(
+            new AuditPage(result.items(), result.total(), page, result.pageSize()));
     }
 }

@@ -42,10 +42,8 @@ class EligibilityMirrorFallbackTest {
         SchemeRuleVersion row = new SchemeRuleVersion();
         row.scheme = "PRE_MATRIC";
         row.academicYear = "2026-27";
-        row.rulesJson = """
-            {"scheme": "PRE_MATRIC", "academic_year": "2026-27",
-             "rules": [{"claim": "income", "op": "exists", "onFail": "no income"}]}
-            """;
+        row.rulesJson = Map.of("scheme", "PRE_MATRIC", "academic_year", "2026-27",
+            "rules", List.of(Map.of("claim", "income", "op", "exists", "onFail", "no income")));
         when(mirror.findBySchemeIgnoreCaseAndAcademicYear("pre-matric", "2026-27"))
             .thenReturn(Optional.of(row));
         when(engine.evaluate(any(), anyMap()))
@@ -70,8 +68,7 @@ class EligibilityMirrorFallbackTest {
 
     @Test
     @DisplayName("no disk file and no mirror row still reports rules as unpublished")
-    void noMirrorStillMissing(@TempDir Path root) {
-        RuleEngine engine = mock(RuleEngine.class);
+    void noMirrorStillMissing(@TempDir Path root) {        RuleEngine engine = mock(RuleEngine.class);
         ClaimRepository claims = mock(ClaimRepository.class);
         SchemeRuleVersionRepository mirror = mock(SchemeRuleVersionRepository.class);
         when(claims.findLiveByUsidWithTypes(any(UUID.class))).thenReturn(List.of());
@@ -85,5 +82,34 @@ class EligibilityMirrorFallbackTest {
             new EligibilityRequest(UUID.randomUUID(), "2026-27"));
 
         assertThat(response.verdicts()).allMatch(v -> v.verdict().equals("missing_items"));
+    }
+
+    @Test
+    @DisplayName("mirror row stored as PRE_MATRIC is found through the pre-matric request")
+    void mirrorFallbackBridgesHyphenAndUnderscore(@TempDir Path root) {
+        // Rule files author PRE_MATRIC while the request path uses pre-matric,
+        // and IgnoreCase folds case but not separators: only the underscore
+        // spelling is stubbed here, so an exact-match-only lookup would miss.
+        RuleEngine engine = mock(RuleEngine.class);
+        ClaimRepository claims = mock(ClaimRepository.class);
+        SchemeRuleVersionRepository mirror = mock(SchemeRuleVersionRepository.class);
+        when(claims.findLiveByUsidWithTypes(any(UUID.class))).thenReturn(List.of());
+        SchemeRuleVersion row = new SchemeRuleVersion();
+        row.scheme = "PRE_MATRIC";
+        row.academicYear = "2026-27";
+        row.rulesJson = Map.of("scheme", "PRE_MATRIC", "academic_year", "2026-27",
+            "rules", List.of(Map.of("claim", "income", "op", "exists", "onFail", "no income")));
+        when(mirror.findBySchemeIgnoreCaseAndAcademicYear("pre_matric", "2026-27"))
+            .thenReturn(Optional.of(row));
+        when(engine.evaluate(any(), anyMap()))
+            .thenReturn(List.of(new RuleOutcome(true, "", "")));
+
+        EligibilityService service = new EligibilityService(engine, claims,
+            mock(ClaimValueCipher.class), mirror,
+            root.resolve("empty-rules").toString());
+        EligibilityResponse response = service.evaluate(
+            new EligibilityRequest(UUID.randomUUID(), "2026-27"));
+
+        assertThat(response.verdicts().get(0).verdict()).isEqualTo("eligible");
     }
 }

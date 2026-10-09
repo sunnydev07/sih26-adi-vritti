@@ -107,13 +107,14 @@ public class ConsentGate {
             "No active consent for purpose '" + purpose + "'");
     }
 
-    static boolean isMinor(Scholar scholar) {
-        return isMinor(scholar, Clock.systemUTC());
-    }
-
     /**
      * Overload for tests: pin "today" so a 2008 date of birth is a minor in
      * 2026 and the same assertion is still true in 2030.
+     *
+     * <p>There is deliberately no clockless overload: the single-arg version
+     * used {@code Clock.systemUTC()}, reintroducing the testability gap and
+     * cross-node drift {@code TimeConfig} exists to remove. Production passes
+     * the injected clock (see line 76); tests pin their own.
      */
     static boolean isMinor(Scholar scholar, Clock clock) {
         Object dob = scholar.demographics == null ? null : scholar.demographics.get("dob");

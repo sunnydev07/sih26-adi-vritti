@@ -8,7 +8,7 @@ import { BottomNav } from "@/components/dashboard/bottomnav";
 import { DemoTour } from "@/components/demo/DemoTour";
 import { Header } from "@/components/dashboard/header";
 import { Sidebar } from "@/components/dashboard/sidebar";
-import { DATA_SOURCE } from "@/lib/api";
+import { DATA_SOURCE, api } from "@/lib/api";
 
 const TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard": { title: "Overview", subtitle: "STP scores, queue counts and disbursement health at a glance" },
@@ -22,9 +22,18 @@ const TITLES: Record<string, { title: string; subtitle: string }> = {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const meta = TITLES[pathname] ?? TITLES["/dashboard"];
+  // Sidebar badge comes through the same metrics seam as the overview hero,
+  // not a hardcoded copy: a mock edit used to leave the two disagreeing.
+  const [pendingReview, setPendingReview] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    api.getDashboardMetrics().then(
+      (m) => setPendingReview(m.pendingReview),
+      () => setPendingReview(null)
+    );
+  }, []);
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <Sidebar pendingReview={pendingReview} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Header title={meta.title} subtitle={meta.subtitle} />
         {DATA_SOURCE.demo && (

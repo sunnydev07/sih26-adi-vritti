@@ -7,8 +7,12 @@ import hmac
 
 
 def hashed_key(aadhaar_ref: str, salt: str, purpose: str = "coverage-gap") -> str:
+    # Canonicalise the input: ministries that trim the reference and ones that
+    # do not would otherwise compute different keys for the same person and
+    # manufacture a false coverage gap.
+    ref = (aadhaar_ref or "").strip()
     return hmac.new(
-        f"{salt}:{purpose}".encode(), aadhaar_ref.encode(), hashlib.sha256
+        f"{salt}:{purpose}".encode(), ref.encode(), hashlib.sha256
     ).hexdigest()
 
 

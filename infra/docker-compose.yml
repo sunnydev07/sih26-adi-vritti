@@ -12,14 +12,18 @@
 # For any real environment you must at minimum:
 #   SPRING_PROFILES_ACTIVE=prod
 #     Selects application-prod.yml, which sets allow-insecure-dev=false and
-#     enforce-verhoeff=true. Nothing in the code refuses to BOOT with the dev
-#     profile -- that is the hazard: forget this and the service starts happily,
-#     wide open, with no warning beyond a WARN line in the log.
+#     enforce-verhoeff=true. Two interlocks back this up: SecurityConfig only
+#     opens its unauthenticated demo mode when the profiles are exactly {dev}
+#     (the flag is ignored loudly everywhere else), and ProductionSecretGuard
+#     refuses to boot any non-dev profile on the published constants below.
+#     Booting the dev profile in production is still wide open by design --
+#     that is the hazard: forget SPRING_PROFILES_ACTIVE and the service starts
+#     happily, with no refusal and no warning beyond WARN lines in the log.
 #   AADHAAR_VAULT_HMAC_KEY, CLAIM_VAULT_KEY, JWT_HMAC_SECRET, GAP_HMAC_SALT,
 #   AI_SERVICE_TOKEN, CORE_SERVICE_TOKEN, POSTGRES_PASSWORD
 #     All real values, all from your secret store, none of the defaults below.
-#     The prod profile does fail fast on a missing or malformed JWT key, but
-#     nothing checks the values are not the published dev constants.
+#     The prod profile fails fast on a missing or malformed JWT key, and the
+#     guard fails fast when any value is still a published dev constant.
 #
 # The defaults are still overridable from the environment, so this file can be a
 # starting point, but it is not a deployment manifest.
@@ -53,14 +57,19 @@ services:
     image: pgvector/pgvector:pg16
     ports: ["5432:5432"]
     environment:
-      POSTGRES_DB: adivritti
-      POSTGRES_USER: adivritti
-      POSTGRES_PASSWORD: adivritti_dev
+      # Interpolated (not hardcoded) so POSTGRES_USER=myuser actually reaches
+      # the database: Core already reads the same variables, and a hardcoded
+      # postgres side with an interpolated Core side meant custom credentials
+      # created the DB as adivritti/adivritti_dev while Core tried myuser/...
+      # and crash-looped on password authentication failure.
+      POSTGRES_DB: ${POSTGRES_DB:-adivritti}
+      POSTGRES_USER: ${POSTGRES_USER:-adivritti}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-adivritti_dev}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U adivritti"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-adivritti}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -98,7 +107,7 @@ services:
         condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/adivritti
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-adivritti}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-adivritti}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-adivritti_dev}
       SPRING_REDIS_HOST: redis
@@ -121,6 +130,11 @@ services:
       AADHAAR_VAULT_KEY_ID: ${AADHAAR_VAULT_KEY_ID:-v1}
       CLAIM_VAULT_KEY: ${CLAIM_VAULT_KEY:-ZGV2LW9ubHktYWVzMjU2LWtleS0zMi1ieXRlcy1sb24=}
       JWT_HMAC_SECRET: ${JWT_HMAC_SECRET:-ZGV2LW9ubHktand0LXNlY3JldC0zMi1ieXRlcy1sb24=}
+      # Hosts the DocAI tier may fetch caller-supplied evidence URLs from. The
+      # dev stack needs the mock hostnames (single-label docker names resolve
+      # to site-local addresses and would otherwise be rejected); a real
+      # deployment lists its document-store domains here.
+      EVIDENCE_ALLOWED_HOSTS: ${EVIDENCE_ALLOWED_HOSTS:-govsim,minio}
     volumes:
       - ../packages/rules:/rules:ro
 

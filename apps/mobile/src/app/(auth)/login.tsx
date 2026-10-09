@@ -5,6 +5,7 @@ import { useState } from "react";
 import { TextInput, View } from "react-native";
 import { PrimaryButton, Rise, Tx } from "@/components/ui";
 import { useLang } from "@/lib/lang";
+import { signInDemo } from "@/lib/session";
 import { colors } from "@/lib/theme";
 
 export default function LoginScreen() {
@@ -114,12 +115,16 @@ export default function LoginScreen() {
           <View style={{ marginTop: 14, opacity: phone.length === 10 ? 1 : 0.55 }}>
             <PrimaryButton
               amber
-              title={t.loginSendOtp}
+              title={t.loginPreviewDemo}
               icon="chatbox"
               onPress={() => {
-                // Demo entry only: no OTP is sent and no session is minted.
-                // Guard the tap so a short/empty number cannot enter the app.
-                if (phone.length === 10) router.replace("/(tabs)");
+                // Demo entry only: no OTP is sent and the session is an
+                // explicitly-marked demo object, not a credential. Guard the
+                // tap so a short/empty number cannot enter the app.
+                if (phone.length === 10) {
+                  signInDemo(phone);
+                  router.replace("/(tabs)");
+                }
               }}
             />
           </View>

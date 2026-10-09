@@ -239,19 +239,22 @@ jobs:
           echo "::error title=pgvector::vector extension never appeared"
           exit 1
 
-      - name: Flyway V1+V2 migrations applied
+      - name: Flyway V1+V2+V3 migrations applied
         run: |
           set +e
           for i in $(seq 1 96); do
             got=$(docker compose -f infra/docker-compose.yml exec -T postgres \
               psql -U adivritti -d adivritti -tAc \
               "SELECT version FROM flyway_schema_history ORDER BY installed_rank DESC LIMIT 1;" 2>/dev/null)
-            if [ "$got" = "2" ]; then
-              echo "V1+V2 applied"; exit 0
+            # Numeric comparison, not equality: the gate must keep passing when
+            # V4 lands. (Equality against "2" failed every run once V3 shipped,
+            # on a perfectly healthy database.)
+            if [ "$got" -ge 3 ] 2>/dev/null; then
+              echo "migrations applied through V$got"; exit 0
             fi
             sleep 5
           done
-          echo "::error title=flyway::flyway_schema_history never gained V2 after 480s"
+          echo "::error title=flyway::flyway_schema_history never reached V3 after 480s"
           exit 1
 
       - name: Core actuator reports UP

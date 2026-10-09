@@ -118,6 +118,10 @@ public class EligibilityService {
     /**
      * Live claims keyed by claim type, for the rules engine.
      *
+     * <p>Rows arrive newest-first ({@code verifiedAt DESC}): the first row seen
+     * for a type is the live value, and older rows must not overwrite it — a
+     * re-verified income would otherwise keep evaluating at its stale figure.
+     *
      * <p>Encrypted values are decrypted for evaluation only — never written back or
      * logged. A claim that was verified without a value (see
      * {@code VerificationOrchestrator.VALUELESS}) is skipped, so a valueless wallet
@@ -142,7 +146,7 @@ public class EligibilityService {
                 log.debug("Skipping valueless claim type={} usid={}", type, usid);
                 continue;
             }
-            snapshot.put(type, coerce(value));
+            snapshot.putIfAbsent(type, coerce(value));
         }
         return snapshot;
     }
@@ -295,18 +299,8 @@ public class EligibilityService {
      */
     private List<Map<String, Object>> loadMirrorRules(String year, String scheme) {
         try {
-            return mirror.findBySchemeIgnoreCaseAndAcademicYear(scheme, year)
-                .map(row -> {
-                    try {
-                        Map<String, Object> doc = mapper.readValue(
-                            row.rulesJson, new TypeReference<>() {});
-                        return parseRulesDoc(doc);
-                    } catch (Exception e) {
-                        log.error("Could not parse mirrored rules for scheme={} year={}",
-                            scheme, year, e);
-                        return null;
-                    }
-                })
+            return mirrorRow(year, scheme)
+                .map(row -> parseRulesDoc(row.rulesJson))
                 .orElse(null);
         } catch (RuntimeException e) {
             // The mirror must never take eligibility down: no DB on this path
@@ -315,5 +309,22 @@ public class EligibilityService {
                 e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Mirror lookup across the two scheme spellings in the wild: rule files
+     * author {@code PRE_MATRIC} while the request path uses {@code pre-matric},
+     * and {@code IgnoreCase} folds letter case but not {@code -} vs {@code _}.
+     * Without the second spelling the fallback silently misses for every
+     * hyphenated scheme even though a valid, startup-validated row exists.
+     */
+    private java.util.Optional<in.adivritti.core.eligibility.entity.SchemeRuleVersion>
+        mirrorRow(String year, String scheme) {
+        java.util.Optional<in.adivritti.core.eligibility.entity.SchemeRuleVersion> row =
+            mirror.findBySchemeIgnoreCaseAndAcademicYear(scheme, year);
+        if (row.isEmpty() && scheme.indexOf('-') >= 0) {
+            row = mirror.findBySchemeIgnoreCaseAndAcademicYear(scheme.replace('-', '_'), year);
+        }
+        return row;
     }
 }

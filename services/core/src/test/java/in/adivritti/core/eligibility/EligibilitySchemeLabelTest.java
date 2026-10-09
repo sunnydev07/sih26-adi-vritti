@@ -15,6 +15,7 @@ import in.adivritti.core.eligibility.entity.SchemeRuleVersion;
 import in.adivritti.core.eligibility.repository.SchemeRuleVersionRepository;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
@@ -40,10 +41,8 @@ class EligibilitySchemeLabelTest {
         SchemeRuleVersion row = new SchemeRuleVersion();
         row.scheme = "pre-matric";
         row.academicYear = "2026-27";
-        row.rulesJson = """
-            {"scheme": "pre-matric", "academic_year": "2026-27",
-             "rules": [{"claim": "income", "op": "exists", "onFail": "no income"}]}
-            """;
+        row.rulesJson = Map.of("scheme", "pre-matric", "academic_year", "2026-27",
+            "rules", List.of(Map.of("claim", "income", "op", "exists", "onFail", "no income")));
         when(mirror.findBySchemeIgnoreCaseAndAcademicYear("pre-matric", "2026-27"))
             .thenReturn(Optional.of(row));
         when(engine.evaluate(any(), anyMap()))

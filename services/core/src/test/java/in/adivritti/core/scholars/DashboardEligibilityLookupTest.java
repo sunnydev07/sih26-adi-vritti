@@ -60,4 +60,38 @@ class DashboardEligibilityLookupTest {
         assertThat(response.schemes()).hasSize(1);
         assertThat(response.schemes().get(0).eligibility()).isEqualTo("eligible");
     }
+
+    @Test
+    @DisplayName("feed-form scheme key (PRE_MATRIC) shows its verdict instead of unknown")
+    void verdictMatchesFeedFormScheme() {
+        // Seeded applications carry PRE_MATRIC while verdict labels are
+        // filename-form (pre-matric): the lookup must normalise, not miss.
+        UUID usid = UUID.randomUUID();
+        Application app = new Application();
+        app.id = UUID.randomUUID();
+        app.usid = usid;
+        app.scheme = "PRE_MATRIC";
+        app.stage = "district_nodal";
+        app.currentActor = "district";
+        app.createdAt = ZonedDateTime.now().minusDays(3);
+
+        ApplicationRepository applications = mock(ApplicationRepository.class);
+        when(applications.findByUsidOrderByCreatedAtDesc(usid)).thenReturn(List.of(app));
+        DisbursementRepository disbursements = mock(DisbursementRepository.class);
+        when(disbursements.findByUsidOrderByScheme(usid)).thenReturn(List.of());
+        DeficiencyRepository deficiencies = mock(DeficiencyRepository.class);
+        when(deficiencies.findByUsidAndStatusOrderByCreatedAtDesc(usid, "open"))
+            .thenReturn(List.of());
+        EligibilityService eligibility = mock(EligibilityService.class);
+        when(eligibility.evaluate(any(EligibilityRequest.class))).thenReturn(
+            new EligibilityResponse(usid, "2026-27",
+                List.of(new SchemeVerdict("pre-matric", "eligible", List.of(), List.of()))));
+
+        DashboardService service = new DashboardService(applications, disbursements,
+            deficiencies, eligibility, new SlaCalculator(), mock(ConsentGate.class));
+        DashboardResponse response = service.dashboard(usid);
+
+        assertThat(response.schemes()).hasSize(1);
+        assertThat(response.schemes().get(0).eligibility()).isEqualTo("eligible");
+    }
 }

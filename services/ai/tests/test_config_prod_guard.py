@@ -134,6 +134,17 @@ def test_an_unrelated_prefixed_variable_is_left_alone():
     assert _typo_candidates(fields, {"AI_SERVICE_TOK": "x"}) == ["AI_SERVICE_TOK"]
 
 
+def test_other_tools_variables_do_not_brick_the_service():
+    # Second regression guard: the prefix version of this check matched
+    # OPENCODE as "a prefix of opencode_zen_api_key" and refused to import
+    # anywhere that variable is exported. Similarity, not prefixes.
+    fields = set(Settings.model_fields)
+    assert _typo_candidates(fields, {"OPENCODE": "1"}) == []
+    assert _typo_candidates(fields, {"GROQ": "x"}) == []
+    assert _typo_candidates(fields, {"ENABLE": "x"}) == []
+    assert _typo_candidates(fields, {"GAP_HMAC_SALT_TYPO": "x"}) == ["GAP_HMAC_SALT_TYPO"]
+
+
 def test_the_check_survives_the_surrounding_shell():
     # Not a mock: this is the environment the suite actually runs in. If any
     # variable in it looks like a near-miss of a real setting, the process would

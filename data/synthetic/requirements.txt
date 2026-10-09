@@ -1,1 +1,2 @@
-faker>=25.0
+# generate.py is stdlib-only (random, uuid, hashlib, hmac, csv, json, ...).
+# No third-party dependencies to install.

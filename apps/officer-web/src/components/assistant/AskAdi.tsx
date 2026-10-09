@@ -1,6 +1,7 @@
 "use client";
 
 import { MessageCircle, Send, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 import { answerLocal, askAdi, type AdiLang } from "@/components/assistant/assistant";
 import { assistantSuggestions } from "@/lib/plain";
@@ -14,6 +15,7 @@ interface Msg {
 
 /** Floating Ask Adi panel. Bottom sheet on phones, docked card on desktop. */
 export function AskAdi() {
+  const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [lang, setLang] = React.useState<AdiLang>("hi");
   const [draft, setDraft] = React.useState("");
@@ -47,10 +49,17 @@ export function AskAdi() {
     setDraft("");
     setSending(true);
     const ans = await askAdi(trimmed, lang);
+    setSending(false);
+    if (ans.sessionExpired) {
+      // The BFF said 401: leave for login instead of chatting on a dead
+      // session, where every further question would fail the same way.
+      setOpen(false);
+      router.replace("/login");
+      return;
+    }
     idRef.current += 1;
     setMessages((m) => [...m, { id: idRef.current, role: "adi", text: ans.text }]);
     setChips(ans.suggestions.length > 0 ? ans.suggestions : assistantSuggestions);
-    setSending(false);
   }
 
   function onSubmit(e: React.FormEvent) {

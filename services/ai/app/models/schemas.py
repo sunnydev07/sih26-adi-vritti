@@ -44,8 +44,10 @@ class GapQuery(BaseModel):
 class JagoToolCall(BaseModel):
     usid: UUID
     # default_factory, not a bare `{}`: a shared mutable default would let one
-    # request's parameters leak into another's.
-    parameters: dict[str, Any] = Field(default_factory=dict)
+    # request's parameters leak into another's. Bounded: parameters are
+    # forwarded to Core (query string on GET), so a 10k-key body is a DoS and
+    # a cost amplifier, not a filter set.
+    parameters: dict[str, Any] = Field(default_factory=dict, max_length=64)
 
 
 class RagQuery(BaseModel):
@@ -119,9 +121,13 @@ class DbtExplainRequest(BaseModel):
 
 
 class JevDecisionRequest(BaseModel):
-    state: dict[str, Any]
-    questions: dict[str, Any]
-    model: str | None = None
+    # Bounded: these dicts are serialised into a metered upstream call, so a
+    # megabyte of state is token cost and event-loop time, not a decision.
+    # Per-value shape is enforced where the values are consumed (the services
+    # coerce defensively); the boundary only needs to cap the blast radius.
+    state: dict[str, Any] = Field(max_length=64)
+    questions: dict[str, Any] = Field(max_length=64)
+    model: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9._-]+$")
 
 
 class JevDecisionResponse(BaseModel):
@@ -131,12 +137,12 @@ class JevDecisionResponse(BaseModel):
 
 
 class StpScoreRequest(BaseModel):
-    application: dict[str, Any]
+    application: dict[str, Any] = Field(max_length=64)
 
 
 class StpScoreResponse(BaseModel):
     auto_approve_safe: bool
-    probability: float
+    probability: float = Field(ge=0, le=1)
     risk_level: int
     routing: str
     latency_ms: float
@@ -181,14 +187,23 @@ class JagoHelpResponse(BaseModel):
 class JagoIntentResponse(BaseModel):
     intent: str
     needs_usid: bool
-    confidence: float
+    confidence: float = Field(ge=0, le=1)
     latency_ms: float
 
 
+class ChatMessage(BaseModel):
+    # No "system" role: the server owns the system prompt (grounding +
+    # never-invent-status rules). A caller-supplied system message is how
+    # instructions get smuggled past those rules, so it is a 422, not input.
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
 class ChatCompletionRequest(BaseModel):
-    messages: list[dict[str, str]]
+    messages: list[ChatMessage] = Field(min_length=1, max_length=20)
     temperature: float = Field(default=0.2, ge=0.0, le=2.0)
     max_tokens: int | None = Field(default=1024, ge=1, le=8192)
+    lang: str = Field(default="hi", max_length=16)
 
 
 class ChatCompletionResponse(BaseModel):
@@ -198,7 +213,7 @@ class ChatCompletionResponse(BaseModel):
 
 
 class FraudScreenRequest(BaseModel):
-    application: dict[str, Any]
+    application: dict[str, Any] = Field(max_length=64)
 
 
 class FraudScreenResponse(BaseModel):

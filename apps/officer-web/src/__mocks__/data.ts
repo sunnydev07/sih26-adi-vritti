@@ -9,10 +9,14 @@ import type {
 } from "@/types";
 
 export const dashboardMetrics: DashboardMetrics = {
-  totalApplications: 18432,
+  totalApplications: 16464,
   stpRate: 68.4,
   pendingReview: 187,
   paymentSuccessRate: 91.2,
+  // Sums to totalApplications: the donut and the hero must agree. A previous
+  // total of 18432 left 1,968 applications (~11%) unaccounted for on the same
+  // screen. pendingReview stays a district-wide total while the queue below
+  // stages 5 rows — the queue page labels itself a sample.
   schemeBreakdown: [
     { scheme: "Pre-Matric", count: 7210 },
     { scheme: "Post-Matric", count: 6844 },
@@ -170,9 +174,15 @@ export const disbursementRecords: DisbursementRecord[] = [
     scheme: "Post-Matric",
     amountPaise: 1240000,
     status: "failed",
-    failureCode: "REJ-AADHAAR-01",
-    failureReason: "Aadhaar not seeded with bank account (NPCI mapper)",
-    fix: "Visit nearest bank branch with Aadhaar reference slip; seeding takes ~24h, then retry.",
+    // Real PFMS taxonomy code (tokens.failureFixes): the E00* -> specific-fix
+    // branch only runs for codes the table knows, so a mock-only code here
+    // would leave that branch dead until live Core data flips every row to
+    // the generic fix. `fix`/`failureReason` stay null on this row so the
+    // token table drives the copy; the row below keeps a bespoke code + fix
+    // to pin the UNKNOWN fallback.
+    failureCode: "E001_AADHAAR_NOT_SEEDED",
+    failureReason: null,
+    fix: null,
     district: "Mandla",
     updatedAt: "2026-09-18T10:00:00+05:30",
   },

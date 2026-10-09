@@ -68,12 +68,24 @@ public class DashboardService {
                 a.createdAt == null ? ZonedDateTime.now() : a.createdAt);
             schemes.add(new SchemeStatus(
                 a.scheme, a.scheme, deriveStatus(a.stage),
-                verdicts.getOrDefault(a.scheme, "unknown"),
+                verdicts.getOrDefault(normalizeScheme(a.scheme), "unknown"),
                 a.stage, a.currentActor, (int) days, sla.slaDays(a.stage),
                 sumFor(pays, a.scheme, true), sumFor(pays, a.scheme, false)));
         }
 
         return new DashboardResponse(usid, schemes, money, pendingActions(usid));
+    }
+
+    /**
+     * Verdict labels are filename-form ({@code pre-matric}) while stored
+     * applications carry the feed form ({@code PRE_MATRIC}). Without
+     * normalisation the lookup misses and every seeded scheme renders
+     * eligibility {@code "unknown"} — a value the contract enum does not even
+     * allow.
+     */
+    static String normalizeScheme(String scheme) {
+        return scheme == null ? null
+            : scheme.toLowerCase(java.util.Locale.ROOT).replace('_', '-');
     }
 
     /**

@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
-import { ScrollView, View } from "react-native";
+import { useState } from "react";import { ScrollView, View } from "react-native";
 import {
   Card,
   GhostButton,
@@ -17,6 +16,7 @@ import { successTap } from "@/lib/feedback";
 import { useLang } from "@/lib/lang";
 import { claimWords } from "@/lib/plainLanguage";
 import { colors } from "@/lib/theme";
+import { useMounted } from "@/lib/useMounted";
 import { mockClaims } from "@/lib/jago";
 import type { ClaimState } from "@/types";
 
@@ -39,11 +39,13 @@ export default function WalletScreen() {
   const { t } = useLang();
   const [claims] = useState(mockClaims);
   const [connect, setConnect] = useState<ConnectState>("idle");
+  const mounted = useMounted();
 
   function connectLocker() {
     if (connect !== "idle") return;
     setConnect("busy");
     setTimeout(() => {
+      if (!mounted.current) return;
       setConnect("done");
       successTap();
     }, 1400);

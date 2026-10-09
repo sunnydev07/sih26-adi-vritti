@@ -126,10 +126,38 @@ public class RuleValidator {
                     violations.add(key + ": " + String.join("; ", messages));
                     continue;
                 }
+                List<String> semantic = checkRuleSemantics(key, doc);
+                if (!semantic.isEmpty()) {
+                    violations.addAll(semantic);
+                    continue;
+                }
                 docs.put(key, doc);
             }
         } catch (IOException e) {
             violations.add(year.getFileName() + ": cannot list directory (" + e.getMessage() + ")");
         }
+    }
+
+    /**
+     * Shape checks the JSON schema cannot express in draft-07: {@code lte}/{@code gte}
+     * compare numerically, so a string threshold would pass schema validation and
+     * then fail every evaluation at request time. Reject it at startup instead.
+     * (Whether a value is present at all IS schema-checked via anyOf.)
+     */
+    private List<String> checkRuleSemantics(String key, JsonNode doc) {
+        List<String> problems = new ArrayList<>();
+        JsonNode rules = doc.path("rules");
+        if (!rules.isArray()) return problems;
+        int index = 0;
+        for (JsonNode rule : rules) {
+            String op = rule.path("op").asText("");
+            if (("lte".equals(op) || "gte".equals(op))
+                && !rule.path("value").isNumber()) {
+                problems.add(key + ": rule " + index + " uses '" + op
+                    + "' with a non-numeric value");
+            }
+            index++;
+        }
+        return problems;
     }
 }

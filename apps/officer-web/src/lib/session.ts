@@ -210,3 +210,21 @@ export async function mintSession(
   };
   return signSession(claims, secret);
 }
+
+/**
+ * Verify the session cookie on an incoming Route Handler request.
+ *
+ * The BFF proxies (`/api/decisions/*`, `/api/jago/*`) attach server-side
+ * credentials that cost money per call, and `proxy.ts` only guards
+ * `/dashboard/*` — so each of those handlers verifies the session itself and
+ * answers 401 instead of spending quota for an anonymous caller.
+ *
+ * The request is typed structurally (not as NextRequest) so this helper stays
+ * importable from runtime-agnostic code and unit tests.
+ */
+export async function verifyRequestSession(
+  request: { cookies: { get(name: string): { value: string } | undefined } },
+  env: { OFFICER_SESSION_SECRET?: string; NODE_ENV?: string },
+): Promise<SessionClaims | null> {
+  return verifySession(request.cookies.get(SESSION_COOKIE)?.value, sessionSecret(env));
+}

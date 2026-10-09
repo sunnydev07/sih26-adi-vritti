@@ -1,6 +1,8 @@
 package in.adivritti.core.eligibility;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import in.adivritti.core.eligibility.entity.SchemeRuleVersion;
 import in.adivritti.core.eligibility.repository.SchemeRuleVersionRepository;
 import java.util.Map;
@@ -53,7 +55,8 @@ public class RuleBootstrapRunner implements ApplicationRunner {
                 .orElseGet(SchemeRuleVersion::new);
             row.scheme = scheme;
             row.academicYear = year;
-            row.rulesJson = doc.toString();
+            row.rulesJson = new ObjectMapper().convertValue(doc,
+                new TypeReference<Map<String, Object>>() {});
             mirror.save(row);
             written++;
         }

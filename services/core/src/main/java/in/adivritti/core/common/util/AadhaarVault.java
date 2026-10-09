@@ -138,7 +138,7 @@ public class AadhaarVault {
      * test. It is not used as a security gate today, so nothing leaked while it
      * was wrong; it is a predicate whose entire job is to say "this is a reference
      * key", and saying yes to a string that is not one is the failure mode. The
-     * digest half is 64 hex characters, uppercase on the way out of
+     * digest half is 64 hex characters, lowercase on the way out of
      * {@link HexFormat}, and accepted either case on the way in.
      */
     public boolean isReferenceKey(String value) {

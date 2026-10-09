@@ -40,17 +40,36 @@ const bundle = rawBundle as unknown as FaqBundle;
 
 export type AdiLane = "help" | "status";
 
+/** Machine-readable side-channel so the screen can act, not just render. */
+export type AdiNotice =
+  | "session-expired"
+  | "consent-required"
+  | "mirror-offline"
+  | "lang-coming-soon";
+
 export interface AdiAnswer {
   lane: AdiLane;
   text: string;
   suggestions: string[];
   /** True when answered by the AI service; false for the offline mirror. */
   online: boolean;
+  notice?: AdiNotice;
 }
 
-const STATUS_MARKERS = [
-  "my", "mera", "meri", "mere", "mujhe", "mujhko", "hamari",
-  "usid", "app-", "application id", "kab", "where is my",
+// Personal markers: the question is about the CALLER's own file, not the app
+// in general. Split in two because substring matching is wrong for the short
+// ones: a bare "my" occurs inside "academy", "economy" and "army", so single
+// words match on boundaries while multi-word phrases keep substring matching.
+// "usid" is deliberately NOT a word marker: "what is usid" is a general
+// question the USID faq answers — possessive framing ("my/mera usid") and
+// APP-ids catch the personal ones.
+const STATUS_WORD_MARKERS = [
+  "my", "mera", "meri", "mere", "mujhe", "mujhko", "hamari", "hamaari",
+  "kab", "kabhi",
+];
+
+const STATUS_PHRASE_MARKERS = [
+  "app-", "application id", "applicationid", "where is my",
   "why is my", "paise kab", "payment kab", "scholarship kab",
 ];
 
@@ -78,7 +97,9 @@ function isGreeting(t: string): boolean {
 
 function isStatus(t: string): boolean {
   if (/app-\d+/i.test(t)) return true;
-  return STATUS_MARKERS.some((m) => t.includes(m));
+  if (STATUS_PHRASE_MARKERS.some((m) => t.includes(m))) return true;
+  const pattern = new RegExp(`\\b(?:${STATUS_WORD_MARKERS.join("|")})\\b`);
+  return pattern.test(t);
 }
 
 function scoreFaq(f: FaqEntry, t: string, words: Set<string>): number {
@@ -178,19 +199,27 @@ export async function askAdi(raw: string, uiLang: SupportedLang): Promise<AdiAns
   if (!text) {
     return answerLocal("namaste", uiLang);
   }
-  if (BFF_BASE.length > 0) {
+  // Santali/Gondi have no answer bundles anywhere in the stack (the BFF
+  // answers 400 for them): answer in English and say so, instead of silently
+  // serving English behind a Gondi pill.
+  const comingSoon = uiLang === "sat" || uiLang === "gon";
+  if (BFF_BASE.length > 0 && !comingSoon) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2500);
-      const res = await fetch(`${BFF_BASE}/api/jago/help`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ question: text.slice(0, 500), lang: uiLang }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+      let res: Response;
+      try {
+        res = await fetch(`${BFF_BASE}/api/jago/help`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ question: text.slice(0, 500), lang: uiLang }),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (res.ok) {
         const data = await res.json();
         if (typeof data?.answer === "string") {
@@ -201,10 +230,45 @@ export async function askAdi(raw: string, uiLang: SupportedLang): Promise<AdiAns
             online: true,
           };
         }
+      } else {
+        // A non-ok BFF answer is information, not "offline": 401 means the
+        // session died, 403 CONSENT_REQUIRED means the file is blocked, and
+        // anything else falls back to the mirror WITH the offline marker so
+        // the screen can say so instead of silently serving general text.
+        let errorCode = "";
+        try {
+          const err = await res.json();
+          if (typeof err?.error_code === "string") errorCode = err.error_code;
+        } catch {
+          errorCode = "";
+        }
+        if (res.status === 401) {
+          return {
+            lane: "status",
+            text: "Your session expired. Sign in again to continue.",
+            suggestions: [],
+            online: true,
+            notice: "session-expired",
+          };
+        }
+        if (res.status === 403) {
+          return {
+            lane: "status",
+            text:
+              errorCode === "CONSENT_REQUIRED"
+                ? "Your file needs a sharing consent before anything can be looked up. Ask the district office to record it."
+                : "This device is not allowed to open that file. Sign in with the registered number.",
+            suggestions: [],
+            online: true,
+            notice: "consent-required",
+          };
+        }
+        return { ...answerLocal(text, uiLang), notice: "mirror-offline" };
       }
     } catch {
       // Offline (judge demo runs WIFI OFF) — fall through to the mirror.
     }
   }
-  return answerLocal(text, uiLang);
+  const local = answerLocal(text, uiLang);
+  return comingSoon ? { ...local, notice: "lang-coming-soon" } : local;
 }

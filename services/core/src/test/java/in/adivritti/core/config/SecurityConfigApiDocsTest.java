@@ -103,8 +103,11 @@ class SecurityConfigApiDocsTest {
 
 /**
  * Task 0.2: the dev profile commits its secrets on purpose, and every one of them
- * is public. This proves the prod profile refuses to boot while any of them is
- * still in place, and that a real value boots clean.
+ * is public. This proves any NON-dev profile refuses to boot while any of them is
+ * still in place, and that a real value boots clean. The guard used to watch only
+ * {@code prod}, so staging (or a forgotten profile) inherited the published
+ * constants with nobody refusing; it now watches every profile except
+ * {@code dev}.
  */
 class ProductionSecretGuardTest {
 
@@ -114,12 +117,16 @@ class ProductionSecretGuardTest {
     private static final String REAL_SECRET = "c2VjdXJlLXByb2Qta2V5LTMyLWJ5dGVzLW5vdC1kZXY=";
 
     private ApplicationContextRunner runner() {
+        return runnerFor("prod");
+    }
+
+    private ApplicationContextRunner runnerFor(String profile) {
         return new ApplicationContextRunner()
             .withUserConfiguration(ProductionSecretGuard.class)
-            // The guard is @Profile("prod"); activate it explicitly so the test
-            // does not need the whole application context.
+            // The guard is @Profile("!dev"); activate a non-dev profile
+            // explicitly so the test does not need the whole application context.
             .withPropertyValues(
-                "spring.profiles.active=prod",
+                "spring.profiles.active=" + profile,
                 "app.aadhaar.vault-hmac-key=" + REAL_SECRET,
                 "app.vault.encryption-key=" + REAL_SECRET,
                 "app.security.jwt.hmac-secret=" + REAL_SECRET,
@@ -207,5 +214,34 @@ class ProductionSecretGuardTest {
     void blankValuesAreNotCollisions() {
         var guard = new ProductionSecretGuard("", "", "", "", "", "", false);
         assertThatCode(guard::check).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("staging refuses to boot with the committed database password")
+    void stagingRefusesDevConstants() {
+        runnerFor("staging").withPropertyValues("spring.datasource.password=adivritti_dev")
+            .run(context -> assertThat(context).hasFailed());
+    }
+
+    @Test
+    @DisplayName("staging boots clean when every secret is a real value")
+    void stagingBootsCleanWithRealSecrets() {
+        runnerFor("staging").run(context -> assertThat(context).hasNotFailed());
+    }
+
+    @Test
+    @DisplayName("dev boots on the committed constants: the guard does not run there")
+    void devProfileSkipsTheGuard() {
+        runnerFor("dev")
+            .withPropertyValues(
+                "app.aadhaar.vault-hmac-key=" + DEV_VAULT_HMAC,
+                "app.vault.encryption-key=" + DEV_VAULT_KEY,
+                "app.security.jwt.hmac-secret=" + DEV_HMAC_SECRET,
+                "app.ai-service.token=dev-only-ai-service-token",
+                "spring.datasource.password=adivritti_dev",
+                "app.security.allow-insecure-dev=true")
+            .run(context -> assertThat(context)
+                .hasNotFailed()
+                .doesNotHaveBean(ProductionSecretGuard.class));
     }
 }

@@ -124,7 +124,11 @@ export default function ExceptionsPage() {
   }, [rows, query, sortKey, sortDesc]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageRows = filtered.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  // Approvals remove rows, which can strand `page` past the last page — a
+  // false-empty "No files match this filter" though files exist on page 1.
+  // Clamp for render (search/sort already reset; approves do not).
+  const safePage = Math.min(page, pageCount - 1);
+  const pageRows = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) {
@@ -192,7 +196,7 @@ export default function ExceptionsPage() {
               ⚡ Batch Auto-Approve ({autoEligibleCount} files ≥85%)
             </ShimmerButton>
           ) : null}
-          <Badge variant="pending">{filtered.length} in queue</Badge>
+          <Badge variant="pending">{filtered.length} shown · sample queue</Badge>
         </div>
         {/* Plain-words sort: two choices, not six columns. Desktop table keeps full sorting. */}
         <div className="flex w-full gap-2 lg:hidden" role="group" aria-label="Sort queue">
@@ -314,12 +318,12 @@ export default function ExceptionsPage() {
       </GlassCard>
 
       <div className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm">
-        <span className="text-[var(--muted-foreground)]">Page {page + 1} of {pageCount}</span>
+        <span className="text-[var(--muted-foreground)]">Page {safePage + 1} of {pageCount}</span>
         <div className="flex gap-2">
-          <button onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={page === 0} className="min-touch rounded-full border border-[var(--border)] px-4 disabled:opacity-40">
+          <button onClick={() => setPage(Math.max(0, safePage - 1))} disabled={safePage === 0} className="min-touch rounded-full border border-[var(--border)] px-4 disabled:opacity-40">
             Prev
           </button>
-          <button onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} disabled={page >= pageCount - 1} className="min-touch rounded-full border border-[var(--border)] px-4 disabled:opacity-40">
+          <button onClick={() => setPage(Math.min(pageCount - 1, safePage + 1))} disabled={safePage >= pageCount - 1} className="min-touch rounded-full border border-[var(--border)] px-4 disabled:opacity-40">
             Next
           </button>
         </div>
@@ -409,10 +413,10 @@ export default function ExceptionsPage() {
               }}>
                 Approve
               </ShimmerButton>
-              <ShimmerButton tone="amber" onClick={() => toast(`Info requested for ${selected.id}`)}>
+              <ShimmerButton tone="amber" onClick={() => toast(`Demo: info request staged for ${selected.id} — nothing sent (demo console).`)}>
                 Request Info
               </ShimmerButton>
-              <ShimmerButton tone="rose" onClick={() => toast(`${selected.id} escalated to state dept`)}>
+              <ShimmerButton tone="rose" onClick={() => toast(`Demo: ${selected.id} staged for escalation — nothing sent (demo console).`)}>
                 Escalate
               </ShimmerButton>
             </div>

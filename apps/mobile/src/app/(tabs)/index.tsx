@@ -22,6 +22,7 @@ import {
 import { formatPaise, greetingFor } from "@/lib/format";
 import { useLang } from "@/lib/lang";
 import { slaWords } from "@/lib/plainLanguage";
+import { useMounted } from "@/lib/useMounted";
 import { colors, radius, toneColors } from "@/lib/theme";
 import { mockDashboard } from "@/lib/jago";
 
@@ -61,6 +62,7 @@ export default function StudentDashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const { lang, t } = useLang();
   const greet = greetingFor(new Date(), lang);
+  const mounted = useMounted();
 
   useEffect(() => {
     const t = setTimeout(() => setReady(true), 800);
@@ -81,6 +83,7 @@ export default function StudentDashboardScreen() {
     // only re-renders the staged preview. It must not stamp a sync time.
     setRefreshing(true);
     setTimeout(() => {
+      if (!mounted.current) return;
       setRefreshing(false);
     }, 1100);
   }

@@ -20,13 +20,16 @@ export function renderStatusTemplate(out: StatusToolOutput): string {
 
 export interface EligibilityToolOutput {
   schemeName: string;
-  verdict: "eligible" | "not-eligible" | "need-one-more-thing";
+  // Contract enums (docs/openapi/core.yaml: eligible|not_eligible|missing_items),
+  // not paraphrases: wiring these straight into a template must not need a
+  // translation table that drifts.
+  verdict: "eligible" | "not_eligible" | "missing_items";
   missingItem: string | null;
 }
 
 export function renderEligibilityTemplate(out: EligibilityToolOutput): string {
   if (out.verdict === "eligible") return `You are eligible for ${out.schemeName}.`;
-  if (out.verdict === "need-one-more-thing")
+  if (out.verdict === "missing_items")
     return `You are one item away from ${out.schemeName}: ${out.missingItem ?? "a pending document"}.`;
   return `You are not eligible for ${out.schemeName}${out.missingItem ? `: ${out.missingItem}` : "."}`;
 }

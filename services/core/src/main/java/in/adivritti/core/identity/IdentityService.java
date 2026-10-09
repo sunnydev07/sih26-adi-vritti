@@ -15,13 +15,12 @@ import in.adivritti.core.identity.repository.ScholarSystemLinkRepository;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -135,44 +134,40 @@ public class IdentityService {
 
     /**
      * Freeze the computed response under the caller key. On a unique-violation
-     * race the winner's stored row is authoritative: re-read and return it so
-     * every same-key submission converges on one USID.
+     * race the exception propagates: the winner's stored row is authoritative,
+     * but it can only be re-read OUTSIDE this transaction — on PostgreSQL a
+     * constraint violation aborts the enclosing transaction, so any further
+     * SQL here would fail with "current transaction is aborted" and the caller
+     * would get a 500 instead of the winner's USID. The controller retries
+     * once, and the retry short-circuits on the idempotency pre-check.
      */
     private IdentityResolveResponse storeResolution(String key, IdentityResolveResponse response) {
-        try {
-            resolutions.saveAndFlush(fromRecord(key, response));
-            return response;
-        } catch (DataIntegrityViolationException race) {
-            return toResponse(resolutions.findByIdempotencyKey(key).orElseThrow(() -> race));
-        }
+        resolutions.saveAndFlush(fromRecord(key, response));
+        return response;
     }
 
     private IdentityResolution fromRecord(String key, IdentityResolveResponse response) {
-        try {
-            IdentityResolution row = new IdentityResolution();
-            row.idempotencyKey = key;
-            row.usid = response.usid();
-            row.linkedRecords = mapper.writeValueAsString(response.linkedRecords());
-            row.overallConfidence = response.overallConfidence();
-            row.needsHumanReview = response.needsHumanReview();
-            row.duplicateUsids = mapper.writeValueAsString(response.duplicateFlag()
-                .duplicateUsids().stream().map(UUID::toString).toList());
-            return row;
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Cannot serialise identity resolution", e);
-        }
+        IdentityResolution row = new IdentityResolution();
+        row.idempotencyKey = key;
+        row.usid = response.usid();
+        row.linkedRecords = mapper.convertValue(response.linkedRecords(),
+            new TypeReference<List<Map<String, Object>>>() {});
+        row.overallConfidence = response.overallConfidence();
+        row.needsHumanReview = response.needsHumanReview();
+        row.duplicateUsids = response.duplicateFlag().duplicateUsids().stream()
+            .map(UUID::toString).toList();
+        return row;
     }
 
     private IdentityResolveResponse toResponse(IdentityResolution row) {
         try {
-            List<LinkedSystemRecord> linked =
-                mapper.readValue(row.linkedRecords, new TypeReference<>() {});
-            List<String> dupStrings =
-                mapper.readValue(row.duplicateUsids, new TypeReference<>() {});
-            List<UUID> dups = dupStrings.stream().map(UUID::fromString).toList();
+            List<LinkedSystemRecord> linked = mapper.convertValue(row.linkedRecords,
+                new TypeReference<List<LinkedSystemRecord>>() {});
+            List<UUID> dups = (row.duplicateUsids == null ? List.<String>of() : row.duplicateUsids)
+                .stream().map(UUID::fromString).toList();
             return new IdentityResolveResponse(row.usid, linked, row.overallConfidence,
                 row.needsHumanReview, new DuplicateFlag(!dups.isEmpty(), dups));
-        } catch (JsonProcessingException | IllegalArgumentException e) {
+        } catch (IllegalArgumentException e) {
             throw new IllegalStateException(
                 "Stored identity resolution for key is corrupt", e);
         }
@@ -255,8 +250,10 @@ public class IdentityService {
         if (reference.guardianName() != null) {
             scholar.demographics.put("guardianName", reference.guardianName());
         }
-        // Store the reference key, never the Aadhaar number itself.
-        if (reference.aadhaarRefKey() != null) {
+        // Store the reference key, never the Aadhaar number itself. Blank keys
+        // are skipped: the V4 unique index treats "" as a value, so storing it
+        // would collide every keyless re-enrolment with every other one.
+        if (reference.aadhaarRefKey() != null && !reference.aadhaarRefKey().isBlank()) {
             scholar.demographics.put("aadhaarRefKey", reference.aadhaarRefKey());
         }
         return scholars.save(scholar).usid;

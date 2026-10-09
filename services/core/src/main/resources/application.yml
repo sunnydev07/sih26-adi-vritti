@@ -4,7 +4,12 @@ spring:
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/adivritti}
     username: ${SPRING_DATASOURCE_USERNAME:adivritti}
-    password: ${SPRING_DATASOURCE_PASSWORD:adivritti_dev}
+    # No default password: every profile inherits this file, so a committed
+    # default here would silently authenticate staging, test and forgotten-
+    # profile deployments against a published credential. The dev-only default
+    # lives in infra/docker-compose.yml (which also sets it explicitly for
+    # Core), and anything else fails fast at Hikari instead of connecting.
+    password: ${SPRING_DATASOURCE_PASSWORD:}
     hikari:
       maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
       connection-timeout: 10000
@@ -55,7 +60,11 @@ app:
     token: ${AI_SERVICE_TOKEN:}
   verification:
     cache-ttl-seconds: ${VERIFICATION_CACHE_TTL_SECONDS:3600}
-    dashboard-cache-ttl-seconds: ${DASHBOARD_CACHE_TTL_SECONDS:300}
+    # Hosts the DocAI tier may fetch caller-supplied evidence URLs from (exact
+    # or dot-boundary subdomain). Everything else must resolve to public IPs:
+    # loopback, link-local (cloud metadata), unspecified, multicast and
+    # site-local addresses are always rejected. Dev needs the mock hostnames.
+    evidence-allowed-hosts: ${EVIDENCE_ALLOWED_HOSTS:govsim,minio}
   aadhaar:
     # REQUIRED. base64 of >=32 random bytes. No default: the app refuses to start
     # without it, because a guessable key makes every reference key reversible.
@@ -81,7 +90,12 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics
+        # health + info only. `metrics` was exposed here, which made
+        # per-endpoint request counts and JVM telemetry readable by any
+        # authenticated principal — including scholar tokens — on a
+        # privacy-sensitive service. There is no monitoring consumer in this
+        # repo; re-add it behind an officer-role gate if one lands.
+        include: health,info
   endpoint:
     health:
       show-details: never

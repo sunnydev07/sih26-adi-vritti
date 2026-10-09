@@ -80,7 +80,12 @@ export default function OverviewPage() {
     );
   }
 
-  const gapPct = ((metrics.totalStudents - metrics.totalApplied) / metrics.totalStudents) * 100;
+  // A live-shaped payload can carry a zero denominator (Core documents
+  // total_enrolled 0 while the gap join has no rows): unguarded this renders
+  // "NaN% missing" in the hero.
+  const gapPct = metrics.totalStudents > 0
+    ? ((metrics.totalStudents - metrics.totalApplied) / metrics.totalStudents) * 100
+    : 0;
   const latest = metrics.disbursementTrend[metrics.disbursementTrend.length - 1];
 
   return (

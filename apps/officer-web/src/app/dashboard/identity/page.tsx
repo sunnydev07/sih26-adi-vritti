@@ -53,8 +53,11 @@ export default function IdentityPage() {
     setQueue((q) => q.filter((c) => c.id !== active.id));
     setResolved((r) => r + 1);
     setActiveId((id) => {
+      // Advance to the case AFTER the decided one, not back to the first:
+      // the old rest[0] jumped the officer to the top of the queue every time.
+      const idx = queue.findIndex((c) => c.id === id);
       const rest = queue.filter((c) => c.id !== id);
-      return rest[0]?.id ?? null;
+      return rest[idx]?.id ?? rest[0]?.id ?? null;
     });
     setConfirm(null);
     toast(kind === "merge" ? `Demo: ${active.id} staged as merged — no USID was linked (demo console).` : `Demo: ${active.id} staged as separate — nothing recorded (demo console).`);

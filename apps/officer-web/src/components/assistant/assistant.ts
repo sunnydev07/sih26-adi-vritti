@@ -43,11 +43,17 @@ export interface AdiAnswer {
   text: string;
   suggestions: string[];
   online: boolean;
+  /** The BFF answered 401: the console session died mid-chat. */
+  sessionExpired?: boolean;
 }
 
-const STATUS_MARKERS = [
-  "my", "mera", "meri", "mere", "mujhe", "mujhko", "hamari",
-  "usid", "app-", "application id", "kab", "where is my",
+const STATUS_WORD_MARKERS = [
+  "my", "mera", "meri", "mere", "mujhe", "mujhko", "hamari", "hamaari",
+  "kab", "kabhi",
+];
+
+const STATUS_PHRASE_MARKERS = [
+  "app-", "application id", "applicationid", "where is my",
   "why is my", "paise kab", "payment kab", "scholarship kab",
 ];
 
@@ -75,7 +81,12 @@ function isGreeting(t: string): boolean {
 
 function isStatus(t: string): boolean {
   if (/app-\d+/i.test(t)) return true;
-  return STATUS_MARKERS.some((m) => t.includes(m));
+  if (STATUS_PHRASE_MARKERS.some((m) => t.includes(m))) return true;
+  // Single words match on boundaries: a bare "my" occurs inside "academy",
+  // "economy" and "mythology". "usid" is not a marker at all — "what is usid"
+  // is a general question the USID faq answers.
+  const pattern = new RegExp(`\\b(?:${STATUS_WORD_MARKERS.join("|")})\\b`);
+  return pattern.test(t);
 }
 
 function scoreFaq(f: FaqEntry, t: string, words: Set<string>): number {
@@ -172,23 +183,38 @@ export async function askAdi(raw: string, uiLang: AdiLang): Promise<AdiAnswer> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2500);
-    const res = await fetch(HELP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: text.slice(0, 500), lang: uiLang }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    if (res.ok) {
-      const data = await res.json();
-      if (typeof data?.answer === "string") {
+    try {
+      const res = await fetch(HELP_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: text.slice(0, 500), lang: uiLang }),
+        signal: controller.signal,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data?.answer === "string") {
+          return {
+            lane: data.lane === "status" ? "status" : "help",
+            text: data.answer,
+            suggestions: Array.isArray(data.suggestions) ? data.suggestions.slice(0, 3) : [],
+            online: true,
+          };
+        }
+      }
+      // A 401 here means the console session died: report it so the caller
+      // can bounce to login rather than serving the offline mirror as if
+      // nothing happened.
+      if (res.status === 401) {
         return {
-          lane: data.lane === "status" ? "status" : "help",
-          text: data.answer,
-          suggestions: Array.isArray(data.suggestions) ? data.suggestions.slice(0, 3) : [],
+          lane: "status",
+          text: "Your console session expired. Sign in again to continue.",
+          suggestions: [],
           online: true,
+          sessionExpired: true,
         };
       }
+    } finally {
+      clearTimeout(timeoutId);
     }
   } catch {
     // Offline (judge demo runs WIFI OFF) — fall through to the mirror.

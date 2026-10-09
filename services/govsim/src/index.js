@@ -20,7 +20,10 @@ const express = require('express');
 
 const PORT = process.env.PORT || 4000;
 const CHAOS_ENABLED = process.env.CHAOS_ENABLED !== 'false';
-const CHAOS_ERROR_RATE = parseFloat(process.env.CHAOS_ERROR_RATE || '0.08');
+// A non-numeric value parses to NaN, and `rnd() < NaN` is always false, so a
+// typo silently disabled chaos entirely. Fall back to the documented 8%.
+const _parsedChaosRate = parseFloat(process.env.CHAOS_ERROR_RATE || '0.08');
+const CHAOS_ERROR_RATE = Number.isFinite(_parsedChaosRate) ? _parsedChaosRate : 0.08;
 
 // --- Deterministic PRNG (mulberry32, seed = PS number) ---
 let state = 26238;
@@ -30,7 +33,6 @@ function rnd() {
   t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
-const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
 
 // --- Dirty demo dataset: one student, three spellings, plus gap/dupe rows ---
 const DEMO_STUDENT = {
@@ -123,9 +125,14 @@ const verify = (verified, extra = {}) => ({ verified, ...extra });
 
 // NSP — SOAP-ish XML flavour, OTR lookup, legacy rows miss Aadhaar 15%
 app.get('/nsp/verify', (req, res) => {
-  const ok = decide(String(req.query.usid || ''), 'nsp', 0.75);
+  const usid = String(req.query.usid || '');
+  const ok = decide(usid, 'nsp', 0.75);
+  // Stable per USID, not a coin flip per request: "15% legacy rows" is a row
+  // property, so the same student must not alternately have and lack Aadhaar
+  // across calls, or duplicate-linking on Aadhaar flakes.
+  const hasAadhaar = decide(usid, 'nsp-aadhaar', 0.85);
   res.json(verify(ok, { system: 'NSP', name: DEMO_STUDENT.nspName, otr_id: DEMO_STUDENT.otrId,
-    aadhaar_ref_key: rnd() < 0.15 ? null : DEMO_STUDENT.aadhaarRefKey, format: 'soap-xml-ish' }));
+    aadhaar_ref_key: hasAadhaar ? DEMO_STUDENT.aadhaarRefKey : null, format: 'soap-xml-ish' }));
 });
 app.get('/nsp/applications', (req, res) => {
   res.json({ system: 'NSP', records: [{ otr_id: DEMO_STUDENT.otrId, name: DEMO_STUDENT.nspName,
@@ -147,16 +154,26 @@ app.get('/nos/verify', (req, res) => {
     { system: 'NOS', name: DEMO_STUDENT.nosName }));
 });
 app.get('/nos/records', (req, res) => {
+  // A hand-typed query string must still get an invariant shape: non-positive
+  // or non-numeric pages are a 400, not a response with selection_date and
+  // page silently dropped or nulled.
   const page = parseInt(req.query.page || '1', 10);
+  if (!Number.isInteger(page) || page < 1) {
+    return res.status(400).json({ error: 'bad_request', message: 'page must be a positive integer' });
+  }
   res.json({ system: 'NOS', page, per_page: 20,
     selection_date: NOS_DATES[(page - 1) % NOS_DATES.length],
     date_format_note: 'page 1: DD/MM/YYYY, page 2: YYYY-MM-DD, page 3: epoch — good luck',
     records: [{ candidate: DEMO_STUDENT.nosName, year: '2024', category: 'ST' }] });
 });
 
-// UDISE+/APAAR — enrolment, AISHE codes; includes students with ZERO NSP record
+// UDISE+/APAAR — enrolment, AISHE codes; includes students with ZERO NSP record.
+// A genuine rejection path like every other system: ~1 in 10 non-demo USIDs
+// is not found enrolled, deterministically, so Core's corroboration tier and
+// deficiency flow for enrolment claims are actually exercisable.
 app.get('/udise/verify', (req, res) => {
-  res.json(verify(true, { system: 'UDISE+', enrolled: true, aishe_code: 'AISHE-MP-042' }));
+  const ok = decide(String(req.query.usid || ''), 'udise', 0.9);
+  res.json(verify(ok, { system: 'UDISE+', enrolled: ok, aishe_code: 'AISHE-MP-042' }));
 });
 app.get('/udise/students', (req, res) => {
   res.json({ system: 'UDISE+', district: req.query.district || 'Mandla',
@@ -164,15 +181,28 @@ app.get('/udise/students', (req, res) => {
       { name: 'Phulo Gond', school: 'Govt HS Bichhiya, Mandla', class: 9, has_nsp_record: false }] });
 });
 
-// PFMS/DBT — payment status + full rejection taxonomy
+// PFMS/DBT — payment status + full rejection taxonomy.
+// A genuine rejection path: ~1 in 10 non-demo USIDs fails bank-account
+// validation, deterministically, so the "failures become deficiencies" half of
+// the demo is exercisable through PFMS and not only DigiLocker/NOS.
 const PFMS_CODES = ['E001_AADHAAR_NOT_SEEDED', 'E002_ACCOUNT_DORMANT', 'E003_IFSC_CHANGED',
   'E004_NAME_MISMATCH', 'E005_FUNDS_NOT_RELEASED', 'E006_OTHER', null, null];
 app.get('/pfms/verify', (req, res) => {
-  res.json(verify(true, { system: 'PFMS', account_valid: true }));
+  const ok = decide(String(req.query.usid || ''), 'pfms', 0.9);
+  res.json(verify(ok, { system: 'PFMS', account_valid: ok }));
 });
 app.get('/pfms/status', (req, res) => {
-  res.json({ system: 'PFMS', pfms_ref: 'PFMS-9988776655', status: 'failed',
-    failure_code: pick(PFMS_CODES), sanctioned_amount_paise: 700000, paid_amount_paise: 0 });
+  // Stable per payment reference, not a fresh draw per poll: repeated polls
+  // for the same payment cycled through E001–E006, so the DBT-Doctor narrative
+  // and JAGO tool output changed between identical calls. The demo reference
+  // is pinned to E001 (Aadhaar seeding — Beat 4's story).
+  const ref = String(req.query.pfms_ref || 'PFMS-9988776655');
+  const failureCode = ref === 'PFMS-9988776655'
+    ? 'E001_AADHAAR_NOT_SEEDED'
+    : PFMS_CODES[stableHash(`pfms:${ref}`) % PFMS_CODES.length];
+  res.json({ system: 'PFMS', pfms_ref: ref, status: failureCode ? 'failed' : 'paid',
+    failure_code: failureCode, sanctioned_amount_paise: 700000,
+    paid_amount_paise: failureCode ? 0 : 700000 });
 });
 
 // UGC-NTA — NET/JRF results

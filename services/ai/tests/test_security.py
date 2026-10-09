@@ -12,8 +12,9 @@ gate has to refuse rather than serve.
 
 from fastapi.testclient import TestClient
 
-from app.config import DEV_TOKEN, settings
+from app.config import DEV_SALT, DEV_TOKEN, settings
 from app.main import app
+from app.services import gap_service
 
 TOKEN = "test-service-token"
 client = TestClient(app)
@@ -237,4 +238,27 @@ def test_the_dev_opt_in_still_checks_the_presented_token(monkeypatch):
     monkeypatch.setattr(settings, "allow_insecure_dev", True)
     r = client.post("/gap/hash", json={"aadhaar_ref": "AVR-123"}, headers=_auth("wrong"))
     assert r.status_code == 401
+
+
+def test_gap_hash_refuses_the_published_dev_salt(monkeypatch):
+    # Serving under the published salt returns deterministic hashes anyone can
+    # rainbow-table: a hash oracle behind authentication is still an oracle.
+    monkeypatch.setattr(settings, "gap_hmac_salt", DEV_SALT)
+    monkeypatch.setattr(settings, "allow_insecure_dev", False)
+    r = client.post("/gap/hash", json={"aadhaar_ref": "AVR-123"}, headers=_auth())
+    assert r.status_code == 503, r.text
+    assert "hashed_key" not in r.json()
+
+
+def test_gap_hash_serves_under_the_dev_salt_only_with_the_opt_in(monkeypatch):
+    monkeypatch.setattr(settings, "gap_hmac_salt", DEV_SALT)
+    monkeypatch.setattr(settings, "allow_insecure_dev", True)
+    r = client.post("/gap/hash", json={"aadhaar_ref": "AVR-123"}, headers=_auth())
+    assert r.status_code == 200, r.text
+
+
+def test_hash_input_is_canonicalised_before_hashing():
+    # Ministries that trim the reference and ones that do not must compute the
+    # same key, or the join manufactures a false coverage gap.
+    assert gap_service.hashed_key("AVR-123", "s") == gap_service.hashed_key("  AVR-123  ", "s")
 

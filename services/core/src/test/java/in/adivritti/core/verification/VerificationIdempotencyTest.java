@@ -1,6 +1,7 @@
 package in.adivritti.core.verification;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -143,5 +144,46 @@ class VerificationIdempotencyTest {
         ArgumentCaptor<Claim> captor = ArgumentCaptor.forClass(Claim.class);
         verify(claims).save(captor.capture());
         assertThat(captor.getValue().idempotencyKey).isNull();
+    }
+
+    @Test
+    @DisplayName("an expired claim for the same key re-verifies and renews the row in place")
+    void expiredClaimRenewsInPlace() {
+        Claim expired = existingClaim(usid, "key-1");
+        expired.verifiedAt = ZonedDateTime.now().minusDays(400);
+        expired.validUntil = ZonedDateTime.now().minusDays(35);
+        when(claims.findFirstByUsidAndClaimTypeAndIdempotencyKey(usid, "income", "key-1"))
+            .thenReturn(Optional.of(expired));
+
+        VerifyResponse response =
+            orchestrator.verify(new VerifyRequest(usid, "income", "ev-2", "key-1"));
+
+        // The chain ran (no replay), and the winner is the SAME row renewed —
+        // a second row for the key would violate uq_claim_idempotency.
+        verify(strategy).attempt(any(VerificationAttempt.class));
+        assertThat(response.claimId()).isEqualTo(expired.id);
+        assertThat(response.verdict()).isEqualTo("verified");
+        assertThat(response.validUntil()).isAfter(ZonedDateTime.now());
+        ArgumentCaptor<Claim> captor = ArgumentCaptor.forClass(Claim.class);
+        verify(claims).save(captor.capture());
+        assertThat(captor.getValue().id).isEqualTo(expired.id);
+        verify(claims, never()).saveAndFlush(any(Claim.class));
+    }
+
+    @Test
+    @DisplayName("a non-idempotency constraint failure is not mislabelled as a lost race")
+    void foreignKeyViolationSurfacesUnchanged() {
+        when(claims.findFirstByUsidAndClaimTypeAndIdempotencyKey(any(UUID.class), any(String.class),
+                any(String.class)))
+            .thenReturn(Optional.empty());
+        when(claims.saveAndFlush(any(Claim.class))).thenThrow(
+            new org.springframework.dao.DataIntegrityViolationException(
+                "duplicate key value violates foreign key constraint \"claim_usid_fkey\""));
+
+        assertThatThrownBy(() ->
+                orchestrator.verify(new VerifyRequest(usid, "income", "ev-1", "key-1")))
+            .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class)
+            .hasMessageContaining("claim_usid_fkey");
+        verify(strategy).attempt(any(VerificationAttempt.class));
     }
 }

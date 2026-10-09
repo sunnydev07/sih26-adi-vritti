@@ -537,6 +537,14 @@ components:
         aadhaar_ref_key:
           type: string
           description: Aadhaar Data Vault reference key — NEVER the Aadhaar number
+        aadhaar_number:
+          type: string
+          writeOnly: true
+          description: >
+            Raw Aadhaar, accepted ONLY so the vault can derive a reference key
+            (converted at the boundary; never persisted, logged, or echoed).
+            Prefer sending aadhaar_ref_key. Present so security reviewers see
+            the plaintext intake the contract otherwise hides.
 
     LinkedSystemRecord:
       type: object
@@ -682,7 +690,7 @@ components:
         resolution_route: { type: string }
         status:
           type: string
-          enum: [open, in_progress, resolved]
+          enum: [open, in_progress, resolved, waived]
 
     Claim:
       type: object
@@ -869,13 +877,13 @@ components:
         enrolled_students:
           type: integer
           description: >
-            Always 0 today. UDISE enrolment lives in govsim, not in Core, and
-            applications carry no school, so Core has no denominator to divide
-            by. Reporting 0 rather than inventing one keeps the field meaningful
-            once the enrolment source is wired.
+            Enrolled candidates for the school from the coverage_candidate
+            table; applicants is enrolled minus the unreached gap subset.
+            (Older text said "always 0": true of the stale seed, fixed when the
+            generator started emitting reached rows.)
         applicants:
           type: integer
-          description: Always 0 today, for the same reason as enrolled_students.
+          description: Enrolled candidates minus the unreached gap subset.
         gap_count: { type: integer }
         pvtg_gap_count: { type: integer }
 

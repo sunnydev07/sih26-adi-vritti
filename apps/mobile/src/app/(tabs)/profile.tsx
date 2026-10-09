@@ -1,8 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import type { ReactNode } from "react";
-import { ScrollView, Switch, View } from "react-native";
+import type { ReactNode } from "react";import { ScrollView, Switch, View } from "react-native";
 import {
   Card,
   Eyebrow,
@@ -16,7 +15,9 @@ import {
 import { successTap } from "@/lib/feedback";
 import { maskAadhaar } from "@/lib/format";
 import { useLang } from "@/lib/lang";
+import { signOut } from "@/lib/session";
 import { colors } from "@/lib/theme";
+import { useMounted } from "@/lib/useMounted";
 
 type SyncState = "idle" | "busy" | "done";
 
@@ -78,11 +79,13 @@ export default function ProfileScreen() {
   const { lang, t, toggle } = useLang();
   const [sync, setSync] = useState<SyncState>("idle");
   const [offlineFiles, setOfflineFiles] = useState(true);
+  const mounted = useMounted();
 
   function syncNow() {
     if (sync === "busy") return;
     setSync("busy");
     setTimeout(() => {
+      if (!mounted.current) return;
       setSync("done");
       successTap();
     }, 1300);
@@ -164,7 +167,12 @@ export default function ProfileScreen() {
 
         <Rise delay={280}>
           <PressableScale
-            onPress={() => router.replace("/login")}
+            onPress={() => {
+              // Demo session is in-memory: clearing it is the whole sign-out.
+              // Navigating alone would leave it usable.
+              signOut();
+              router.replace("/login");
+            }}
             haptic
             accessibilityLabel="Sign out"
             style={{

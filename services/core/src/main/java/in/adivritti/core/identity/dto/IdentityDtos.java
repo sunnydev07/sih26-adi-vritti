@@ -49,7 +49,12 @@ public final class IdentityDtos {
             @Size(max = 20) String aadhaarNumber) {
 
             public IdentityRecord {
-                if (bankAccountLast4 != null && !bankAccountLast4.matches("[0-9]{4}")) {
+                // Mirrors the @Pattern above (^$|^\d{4}$): portal exports send
+                // "unknown" as an empty string, and rejecting it here turned an
+                // explicitly-optional field into a 400 with no field detail
+                // (deserialisation throws before bean validation runs).
+                if (bankAccountLast4 != null && !bankAccountLast4.isEmpty()
+                    && !bankAccountLast4.matches("[0-9]{4}")) {
                     throw new IllegalArgumentException("bankAccountLast4 must be 4 digits");
                 }
             }
