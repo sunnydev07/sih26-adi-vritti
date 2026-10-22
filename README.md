@@ -10,6 +10,59 @@ portals** (NSP, SFMP, NOS) into one app for Scheduled Tribe students — with an
 officer console for verification, disbursement tracking, and coverage-gap
 analysis.
 
+## Screenshots
+
+All screenshots are the **officer console** (responsive mobile layout) running on
+seeded synthetic data — no real student PII.
+
+<p align="center">
+  <img src="apps/officer-web/screenshots/officer_web01.png" alt="Officer console overview dashboard" width="300">
+  <br>
+  <sub><b>Overview</b> — decisions waiting, DBT success rate, and students still missing from the scheme, at a glance.</sub>
+</p>
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="apps/officer-web/screenshots/officer_web-sidebar.png" alt="Officer console navigation" width="240"><br>
+      <sub><b>Navigation</b> — Overview, Exception Queue, Coverage Gap, Identity Resolution, Disbursements, Settings.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="apps/officer-web/screenshots/officer_web-exception_queue.png" alt="Exception queue" width="240"><br>
+      <sub><b>Exception Queue</b> — SLA-breached files ranked by urgency, with batch auto-approve for high-confidence cases.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="apps/officer-web/screenshots/officer_web-coverage_gap.png" alt="Coverage gap" width="240"><br>
+      <sub><b>Coverage Gap</b> — ST enrolment vs applications by state, drillable from national to district level.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="apps/officer-web/screenshots/disbursment_tracker.png" alt="Disbursement tracker" width="240"><br>
+      <sub><b>Disbursements</b> — money reached, money stuck, and a plain-language fix for every failed payment.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="apps/officer-web/screenshots/identity_resolution-01.png" alt="Identity resolution queue" width="240"><br>
+      <sub><b>Identity Resolution</b> — uncertain USID matches sorted most-uncertain-first, with per-field match confidence.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="apps/officer-web/screenshots/identity_resolution-02.png" alt="Identity adjudication" width="240"><br>
+      <sub><b>Adjudication</b> — side-by-side records and one tap for Same Person / Different People / Need More Info.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="apps/officer-web/screenshots/Jev_descition_model_hepls_in_autoapproval.png" alt="Decision detail with JEV auto-approval score" width="240"><br>
+      <sub><b>Decision detail</b> — the JEV rules engine scores auto-approval, explains why, and routes to a human when needed.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="apps/officer-web/screenshots/ask%20adit-rag%20chatbot.png" alt="Ask Adi chatbot" width="240"><br>
+      <sub><b>Ask Adi</b> — bilingual (हिंदी / English) app-help assistant with grounded answers.</sub>
+    </td>
+    <td align="center" width="33%"></td>
+  </tr>
+</table>
+
 ## The 9 layers
 
 | # | Layer | What it does |
